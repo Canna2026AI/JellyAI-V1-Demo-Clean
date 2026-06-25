@@ -1,18 +1,69 @@
 // AI agents page and modal events.
 
 function bindAgentEvents() {
-document.querySelectorAll("[data-assistant-sub]").forEach((el) =>
+  ensureAgentState();
+  const searchInput = document.querySelector("[data-agent-search]");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      const cursor = searchInput.selectionStart || searchInput.value.length;
+      state.agentSearchQuery = searchInput.value;
+      render();
+      const nextInput = document.querySelector("[data-agent-search]");
+      if (nextInput) {
+        nextInput.focus();
+        nextInput.setSelectionRange(cursor, cursor);
+      }
+    });
+  }
+  document.querySelectorAll("[data-agent-filter]").forEach((el) =>
+    el.addEventListener("click", () => setState({ agentStatusFilter: el.dataset.agentFilter }))
+  );
+  document.querySelectorAll("[data-agent-status-toggle]").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleAgentStatus(el.dataset.agentStatusToggle);
+    })
+  );
+  document.querySelectorAll("[data-assistant-sub]").forEach((el) =>
     el.addEventListener("click", () => setState({ page: "ai", selectedAssistant: null, assistantSub: el.dataset.assistantSub }))
   );
-  document.querySelectorAll("[data-open-assistant]").forEach((el) => el.addEventListener("click", () => setState({ selectedAssistant: el.dataset.openAssistant, detailTab: "setting" })));
+  document.querySelectorAll("[data-open-assistant]").forEach((el) => el.addEventListener("click", () => openAgent(el.dataset.openAssistant, "setting")));
   document.querySelectorAll("[data-detail-tab]").forEach((el) => el.addEventListener("click", () => setState({ detailTab: el.dataset.detailTab })));
   const modelToggle = document.querySelector("[data-toggle-model-panel]");
-  if (modelToggle) modelToggle.addEventListener("click", () => setState({ detailModelOpen: !state.detailModelOpen }));
+  if (modelToggle) modelToggle.addEventListener("click", () => {
+    captureAgentSettingsDraft();
+    setState({ detailModelOpen: !state.detailModelOpen });
+  });
   document.querySelectorAll("[data-detail-model]").forEach((el) =>
     el.addEventListener("click", () => {
+      captureAgentSettingsDraft();
+      state.agentSettingsDraft.model = el.dataset.detailModel;
       state.detailModelOpen = false;
       showToast(`已选择模型：${el.dataset.detailModel}`);
       render();
+    })
+  );
+  const saveSettings = document.querySelector("[data-agent-save-settings]");
+  if (saveSettings) saveSettings.addEventListener("click", saveAgentSettings);
+  document.querySelectorAll("[data-agent-remove-knowledge]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const agent = getSelectedAgent();
+      setAgentRelation(agent, "knowledgeBaseIds", agent.knowledgeBaseIds.filter((id) => id !== el.dataset.agentRemoveKnowledge));
+      showToast("知识库已移除");
+    })
+  );
+  document.querySelectorAll("[data-agent-remove-skill]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const agent = getSelectedAgent();
+      setAgentRelation(agent, "skillIds", agent.skillIds.filter((id) => id !== el.dataset.agentRemoveSkill));
+      showToast("技能已移除");
+    })
+  );
+  document.querySelectorAll("[data-agent-remove-tool]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const agent = getSelectedAgent();
+      setAgentRelation(agent, "toolIds", agent.toolIds.filter((id) => id !== el.dataset.agentRemoveTool));
+      showToast("工具已移除");
     })
   );
   document.querySelectorAll("[data-detail-action]").forEach((el) =>
@@ -60,12 +111,30 @@ document.querySelectorAll("[data-skill-filter]").forEach((el) =>
     });
   }
 
-const assistantSend = document.getElementById("assistantSend");
+  const assistantInput = document.getElementById("assistantInput");
+  if (assistantInput) {
+    assistantInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendAssistantMessage();
+      }
+    });
+  }
+  const assistantSend = document.getElementById("assistantSend");
   if (assistantSend) assistantSend.addEventListener("click", sendAssistantMessage);
 }
 
 function bindAgentModalEvents() {
-document.querySelectorAll("[data-import-skill-select]").forEach((el) =>
+  document.querySelectorAll("[data-close-modal]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.agentModalSelection = [];
+      state.agentToolSelection = [];
+      state.agentModalAgentId = null;
+      state.agentToolModalAgentId = null;
+      state.agentSkillModalAgentId = null;
+    })
+  );
+  document.querySelectorAll("[data-import-skill-select]").forEach((el) =>
     el.addEventListener("change", () => {
       const skillId = el.dataset.importSkillSelect;
       const selected = new Set(state.importSkillSelected);
@@ -74,17 +143,37 @@ document.querySelectorAll("[data-import-skill-select]").forEach((el) =>
       setState({ importSkillSelected: Array.from(selected) });
     })
   );
+  document.querySelectorAll("[data-agent-knowledge-select]").forEach((el) =>
+    el.addEventListener("change", () => {
+      const selected = new Set(state.agentModalSelection);
+      if (el.checked) selected.add(el.dataset.agentKnowledgeSelect);
+      else selected.delete(el.dataset.agentKnowledgeSelect);
+      setState({ agentModalSelection: Array.from(selected) });
+    })
+  );
+  document.querySelectorAll("[data-agent-tool-select]").forEach((el) =>
+    el.addEventListener("change", () => {
+      const selected = new Set(state.agentToolSelection);
+      if (el.checked) selected.add(el.dataset.agentToolSelect);
+      else selected.delete(el.dataset.agentToolSelect);
+      setState({ agentToolSelection: Array.from(selected) });
+    })
+  );
 }
 
 function sendAssistantMessage() {
+  const agent = getSelectedAgent();
   const input = document.getElementById("assistantInput");
   const text = input.value.trim();
-  if (!text) return;
-  state.messages.push({ role: "user", text });
-  state.messages.push({
-    role: "assistant",
-    text: "已根据物流问答知识库为您查询：该渠道支持欧洲多国派送，具体价格需要根据重量、派送国家、地址类型和件数核算。",
-    meta: "多模态知识库：物流问答 · 执行成功 · 消耗 token：532 · 动作执行：1次 · 预估费用：0.001元",
-  });
+  if (!text || !agent || state.agentChatLoading) return;
+  agent.messages.push({ role: "user", text });
+  input.value = "";
+  state.agentChatLoading = true;
   render();
+  window.setTimeout(() => {
+    const reply = generateAgentReply(agent, text);
+    agent.messages.push({ role: "assistant", text: reply.text, meta: reply.meta });
+    state.agentChatLoading = false;
+    render();
+  }, 450);
 }

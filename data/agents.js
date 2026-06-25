@@ -1,5 +1,94 @@
 // Mock AI agent, skill, tool, and automation data.
 
+const aiAgentModels = [
+  "自动选择 doubao-seed-2.0-mini-260215",
+  "豆包 Doubao-Seed-2.0-lite-260215",
+  "豆包 Doubao-Seed-2.0-pro-260215",
+  "豆包 Doubao-Seed-2.0-mini-260215",
+  "阿里通义千问 qwen3.6-flash",
+];
+
+const aiAgentToolOptions = [
+  { id: "wecom_send", name: "企业微信(代运营)", action: "发送消息", icon: "企", status: "已配置" },
+  { id: "wecom_group", name: "企业微信(代运营)", action: "创建群聊", icon: "群", status: "已配置" },
+  { id: "webhook_order", name: "Webhook", action: "调用第三方接口", icon: "API", status: "待配置" },
+  { id: "bing_search", name: "微软Bing搜索(内置)", action: "搜索公开网页", icon: "搜", status: "无需授权" },
+];
+
+const aiAgentIntegrations = [
+  "网站页面",
+  "抖音私信",
+  "小红书私信",
+  "小红书评论",
+  "企业微信（群聊/私聊）",
+  "微信公众号",
+  "微信客服(企业微信版)",
+  "API接口",
+  "飞书机器人",
+];
+
+const aiAgents = [
+  {
+    id: "agent-canna-test",
+    name: "canna测试",
+    description: "用于企业微信物流咨询、报价问答和转人工服务",
+    status: "enabled",
+    model: "自动选择 doubao-seed-2.0-mini-260215",
+    opening: "Hi~ 我是您的智能助手，想要我协助您完成什么任务？发送消息给我吧！",
+    prompt: "你是欧诚国际物流的 AI 客服助手。优先根据知识库回答报价、渠道、时效、派送范围等问题；用户需要合同、投诉或明确找人工时转人工。",
+    contextLimit: 4,
+    showToken: true,
+    knowledgeBaseIds: ["logistics"],
+    skillIds: ["lead_group_internal", "transfer_human_1", "stop_reply"],
+    toolIds: ["wecom_send", "bing_search"],
+    intents: [
+      { id: "intent-human", name: "转人工", action: "转入人工客服", enabled: true },
+      { id: "intent-price", name: "报价咨询", action: "回复报价所需字段", enabled: true },
+    ],
+    integrations: ["企业微信（群聊/私聊）", "网站页面"],
+    members: ["Kelvin", "Canna", "运营一组"],
+    messages: [
+      {
+        role: "assistant",
+        text: "Hi~ 我是您的智能助手，想要我协助您完成什么任务？发送消息给我吧！",
+      },
+      {
+        role: "user",
+        text: "欧洲海运包税运行线路",
+      },
+      {
+        role: "assistant",
+        text:
+          "目前常见的欧洲海运包税运行线路为：深圳装柜 → 盐田港 → 鹿特丹港落港 → 荷兰/比利时清关 → 再通过快递或卡车派送至欧洲各地仓库或收件地址。",
+        meta: "多模态知识库：物流问答 · 执行成功 · 信息来源：[1] 物流问答库.xlsx · 消耗 token：819 · 动作执行：1次 · 预估费用：0.002元",
+      },
+    ],
+  },
+  {
+    id: "agent-demo",
+    name: "演示AI助手",
+    description: "面向新成员演示知识库、技能和工具的基础配置流程",
+    status: "disabled",
+    model: "豆包 Doubao-Seed-2.0-lite-260215",
+    opening: "您好，我可以演示 AI 助手的知识库命中、技能调用和工具执行。",
+    prompt: "你是一个产品演示助手，用简洁语言说明 JellyAI 的智能体配置方式。",
+    contextLimit: 6,
+    showToken: true,
+    knowledgeBaseIds: [],
+    skillIds: ["template_transfer"],
+    toolIds: [],
+    intents: [{ id: "intent-demo", name: "功能演示", action: "解释配置流程", enabled: true }],
+    integrations: ["网站页面"],
+    members: ["Kelvin"],
+    messages: [
+      {
+        role: "assistant",
+        text: "您好，我可以演示 AI 助手的知识库命中、技能调用和工具执行。",
+      },
+    ],
+  },
+];
+
 const skills = [
   {
     id: "lead_external_1",

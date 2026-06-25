@@ -29,30 +29,49 @@ function renderAiSubnav(active = state.assistantSub) {
 }
 
 function renderAssistantManager() {
+  ensureAgentState();
+  const agents = getAgents();
   return `<div class="module-content">
     <div class="toolbar compact-toolbar">
       <div>
         <h1 class="page-title">对话智能体</h1>
       </div>
-      <input class="input search-input" placeholder="搜索名称或描述" />
+      <input class="input search-input" data-agent-search placeholder="搜索名称或描述" value="${escapeHtml(state.agentSearchQuery)}" />
     </div>
     <div class="assistant-actions">
       <button class="button primary" data-modal="createAssistant">＋ 创建AI助手</button>
+      <div class="skill-filter-tabs">
+        ${[
+          ["all", "全部"],
+          ["enabled", "已启用"],
+          ["disabled", "已停用"],
+        ]
+          .map(([id, label]) => `<button class="${state.agentStatusFilter === id ? "active" : ""}" data-agent-filter="${id}">${label}</button>`)
+          .join("")}
+      </div>
       <button class="link-button">帮助文档</button>
     </div>
     <div class="assistant-card-row">
-      ${["canna测试", "演示AI助手"]
-        .map(
-          (name) => `
-        <div class="card assistant-card" data-open-assistant="${name}">
+      ${
+        agents.length
+          ? agents
+              .map(
+                (agent) => `
+        <div class="card assistant-card" data-open-assistant="${agent.id}">
           <div style="display:flex; gap:12px; align-items:center">
             ${iconBox("AI")}
-            <div style="font-weight:700">${name}</div>
+            <div>
+              <div style="font-weight:700">${escapeHtml(agent.name)}</div>
+              <div class="subtle assistant-card-desc">${escapeHtml(agent.description)}</div>
+              <span class="tag ${agent.status === "enabled" ? "green" : "red"}">${agent.status === "enabled" ? "已启用" : "已停用"}</span>
+            </div>
           </div>
-          <span class="subtle">☆</span>
+          <button class="button ghost small" data-agent-status-toggle="${agent.id}">${agent.status === "enabled" ? "停用" : "启用"}</button>
         </div>`
-        )
-        .join("")}
+              )
+              .join("")
+          : `<div class="card empty agent-empty-state"><b>暂无智能体</b><span>请创建智能体，或调整搜索和筛选条件。</span><button class="button primary" data-modal="createAssistant">＋ 创建AI助手</button></div>`
+      }
     </div>
   </div>`;
 }
@@ -379,16 +398,24 @@ function renderSkillToolItem() {
 }
 
 function renderAssistantDetail() {
+  const agent = getSelectedAgent();
+  if (!agent) {
+    state.selectedAssistant = null;
+    return renderAssistantManager();
+  }
   const active = state.detailTab;
   return `
     <section class="assistant-detail">
       <div class="detail-head">
         <div class="detail-name">
           ${iconBox("AI")}
-          <span>${state.selectedAssistant}</span>
-          <button class="button ghost small">✎</button>
+          <span>${escapeHtml(agent.name)}</span>
+          <span class="tag ${agent.status === "enabled" ? "green" : "red"}">${agent.status === "enabled" ? "已启用" : "已停用"}</span>
         </div>
-        <button class="button primary">↗ 已分享</button>
+        <div class="assistant-detail-actions">
+          <button class="button" data-agent-status-toggle="${agent.id}">${agent.status === "enabled" ? "停用" : "启用"}</button>
+          <button class="button primary">↗ 已分享</button>
+        </div>
       </div>
       <div class="tabs">
         ${detailTabs
@@ -426,71 +453,84 @@ function renderDetailConfig() {
 }
 
 function renderSettingConfig() {
+  const agent = getSelectedAgent();
+  const draft = getAgentSettingsDraft(agent);
   return `
     <h3 class="detail-section-title">智能助手设置 <span class="subtle">ⓘ</span></h3>
+    <div class="grid-2">
+      <div class="form-row">
+        <div class="label">助手名称</div>
+        <input class="input" id="agentNameInput" style="width:100%" value="${escapeHtml(draft.name)}">
+      </div>
+      <div class="form-row">
+        <div class="label">助手描述</div>
+        <input class="input" id="agentDescInput" style="width:100%" value="${escapeHtml(draft.description)}">
+      </div>
+    </div>
     <div class="form-row">
       <div class="label">选择模型</div>
-      <button class="model-select-row detail-model-select" data-toggle-model-panel><span class="model-dot">山</span><span>自动选择 doubao-seed-2.0-mini-260215</span><span class="tag orange">内置</span><span style="margin-left:auto">☷</span></button>
+      <button class="model-select-row detail-model-select" data-toggle-model-panel><span class="model-dot">山</span><span>${escapeHtml(draft.model)}</span><span class="tag orange">内置</span><span style="margin-left:auto">☷</span></button>
+      <input type="hidden" id="agentModelInput" value="${escapeHtml(draft.model)}">
       ${state.detailModelOpen ? renderDetailModelPanel() : ""}
     </div>
     <div class="form-row">
       <div class="label">功能与步骤设置 <span class="subtle">ⓘ</span><button class="link-button detail-expand">展开</button></div>
       <div class="editor-toolbar detail-toolbar"><b>B</b><b>H</b><span>▣</span><span>☰</span><span>1₂</span><button class="link-button" data-detail-action="智能优化">◎ 智能优化</button><button class="link-button" data-detail-action="插入变量">〔x〕 插入变量</button></div>
-      <div class="rich-editor detail-prompt" contenteditable="true"></div>
+      <div class="rich-editor detail-prompt" id="agentPromptInput" contenteditable="true">${escapeHtml(draft.prompt)}</div>
       <div class="detail-examples">示例： <b>广告文案大师</b> <b>解梦大师</b></div>
     </div>
-    <div class="form-row detail-range-row"><div class="label">支持使用上下文记录 <span class="subtle">ⓘ</span></div><input class="slider" type="range" min="0" max="40" value="4"><div class="range-labels"><span>0</span><span>40</span></div></div>
-    <div class="form-row switch-row"><div class="label">展示token消耗 <span class="subtle">ⓘ</span></div><span class="switch on" data-switch></span></div>
-    <div class="form-row"><div class="label">开场白对话 <span class="subtle">ⓘ</span></div><div class="editor-toolbar">☷ 1₂ ▣ ▦⌄</div><div class="rich-editor opening-editor" contenteditable="true">Hi~ 我是您的智能助手，想要我协助您完成什么任务？发送消息给我吧！</div></div>
+    <div class="form-row detail-range-row"><div class="label">支持使用上下文记录 <span class="subtle">ⓘ</span></div><input class="slider" id="agentContextInput" type="range" min="0" max="40" value="${draft.contextLimit}"><div class="range-labels"><span>0</span><span>40</span></div></div>
+    <div class="form-row switch-row"><div class="label">展示token消耗 <span class="subtle">ⓘ</span></div><span class="switch ${draft.showToken ? "on" : ""}" id="agentShowTokenInput" data-switch></span></div>
+    <div class="form-row"><div class="label">开场白对话 <span class="subtle">ⓘ</span></div><div class="editor-toolbar">☷ 1₂ ▣ ▦⌄</div><div class="rich-editor opening-editor" id="agentOpeningInput" contenteditable="true">${escapeHtml(draft.opening)}</div></div>
     <div class="form-row quick-question-row"><div class="label">快捷提问 <span class="subtle">ⓘ</span></div><div class="quick-input-line"><input class="input" placeholder="提问内容，例如：帮我写一篇文章，关于春游，字数500字左右"><button class="circle-add" data-detail-action="新增快捷提问">＋</button></div></div>
-    <button class="button danger full-width-detail" data-detail-action="删除助手">删除助手</button>`;
+    <button class="button primary full-width-detail" data-agent-save-settings>保存设置</button>
+    <button class="button danger full-width-detail" data-modal="deleteAssistant">删除助手</button>`;
 }
 
 function renderDetailModelPanel() {
-  const models = [
-    "自动选择 doubao-seed-2.0-mini-260215",
-    "豆包 Doubao-Seed-2.0-lite-260215",
-    "豆包 Doubao-Seed-2.0-pro-260215",
-    "豆包 Doubao-Seed-2.0-mini-260215",
-    "阿里通义千问 qwen3.6-flash",
-  ];
+  const agent = getSelectedAgent();
+  const draft = getAgentSettingsDraft(agent);
   return `<div class="detail-model-panel">
-    <div class="model-panel-select"><span class="model-dot">山</span>自动选择 doubao-seed-2.0-mini-260215 <span>⌃</span></div>
+    <div class="model-panel-select"><span class="model-dot">山</span>${escapeHtml(draft.model)} <span>⌃</span></div>
     <div class="model-panel-tabs"><button class="active">内置</button><button>原生</button><button>智能体</button></div>
     <input class="input" placeholder="搜索模型">
     <div class="model-list-title">推荐模型</div>
-    ${models.map((name, index) => `<button class="model-option ${index === 0 ? "active" : ""}" data-detail-model="${name}"><span class="model-dot">山</span>${name}<span>${index === 0 ? "✓" : ""}</span></button>`).join("")}
+    ${aiAgentModels.map((name) => `<button class="model-option ${draft.model === name ? "active" : ""}" data-detail-model="${escapeHtml(name)}"><span class="model-dot">山</span>${escapeHtml(name)}<span>${draft.model === name ? "✓" : ""}</span></button>`).join("")}
   </div>`;
 }
 
 function renderKnowledgeConfig() {
-  const ks = ["物流问答", "报价规则", "售后 FAQ"];
+  const agent = getSelectedAgent();
+  const bound = knowledgeBases.filter((kb) => agent.knowledgeBaseIds.includes(kb.id));
   return `
     <div class="toolbar" style="margin-bottom:12px"><h3>知识设置 ⓘ</h3><button class="button ghost">⚙ 配置</button></div>
-    <div style="display:flex; gap:8px; margin-bottom:14px"><button class="button primary" data-modal="importKnowledge">⇩ 导入知识库</button><button class="button" data-page="knowledgeCreate">＋ 新增知识库</button></div>
-    ${ks
-      .map(
-        (k) => `<div class="mini-card"><div class="mini-card-head"><span>🟢 ${k}</span><span class="switch on" data-switch></span></div><div class="subtle">已启用 · 可用于企业微信自动回复</div></div>`
-      )
-      .join("")}`;
+    <div style="display:flex; gap:8px; margin-bottom:14px"><button class="button primary" data-modal="associateKnowledge">⇩ 绑定知识库</button><button class="button" data-page="knowledgeCreate">＋ 新增知识库</button></div>
+    ${
+      bound.length
+        ? bound
+            .map(
+              (kb) => `<div class="mini-card"><div class="mini-card-head"><span>🟢 ${escapeHtml(kb.name)}</span><button class="button ghost small" data-agent-remove-knowledge="${kb.id}">移除</button></div><div class="subtle">${escapeHtml(kb.count)} · ${escapeHtml(kb.type)} · 可用于企业微信自动回复</div></div>`
+            )
+            .join("")
+        : `<div class="detail-tool-empty"><div class="empty-icon">▤</div><div>暂未绑定知识库</div><button class="button dashed small" data-modal="associateKnowledge">＋ 绑定知识库</button></div>`
+    }`;
 }
 
 function renderSkillConfig() {
-  const skills = [
-    ["用户留资信息收集后发送企业微信群消息", "当用户告知手机号或者微信号后，将联系信息和需求总结发送到企业微信群机器人"],
-    ["转人工服务", "将指定对话分配给人工客服处理"],
-    ["停止回复", "需要停止回复、沉默等场景时使用"],
-    ["自动拉群", "识别客户需求后创建群聊并邀请指定成员"],
-    ["群消息总结", "将群聊历史消息总结给人工客服"],
-  ];
+  const agent = getSelectedAgent();
+  const bound = skills.filter((skill) => agent.skillIds.includes(skill.id));
   return `
     <div class="toolbar" style="margin-bottom:12px"><h3>技能设置 ⓘ</h3></div>
     <div style="display:flex; gap:8px; margin-bottom:14px"><button class="button dark" data-modal="importSkill">⇩ 导入技能</button><button class="button">▦ 技能模板</button></div>
-    ${skills
-      .map(
-        ([name, desc]) => `<div class="mini-card"><div class="mini-card-head"><span>🪁 ${name}</span><span class="switch on" data-switch></span></div><div class="subtle">${desc}</div><div style="margin-top:10px"><span class="tag">通用</span></div></div>`
-      )
-      .join("")}`;
+    ${
+      bound.length
+        ? bound
+            .map(
+              (skill) => `<div class="mini-card"><div class="mini-card-head"><span>🪁 ${escapeHtml(skill.name)}</span><button class="button ghost small" data-agent-remove-skill="${skill.id}">移除</button></div><div class="subtle">${escapeHtml(skill.desc)}</div><div style="margin-top:10px"><span class="tag">${escapeHtml(skill.channel)}</span></div></div>`
+            )
+            .join("")
+        : `<div class="detail-tool-empty"><div class="empty-icon">✣</div><div>暂未导入技能</div><button class="button dashed small" data-modal="importSkill">＋ 导入技能</button></div>`
+    }`;
 }
 
 function renderFlowConfig() {
@@ -507,54 +547,59 @@ function renderFlowConfig() {
 }
 
 function renderIntentConfig() {
+  const agent = getSelectedAgent();
   return `
     <h3>意图列表 ⓘ</h3>
-    <div class="empty">
-      <div>
-        <div style="font-size:48px">🤖</div>
-        <div style="margin:10px 0">暂无可用意图，请添加意图</div>
-        <button class="button primary">⇩ 导入意图</button>
-        <button class="button" data-drawer="intentDrawer">＋ 新增意图</button>
-      </div>
-    </div>`;
+    ${
+      agent.intents.length
+        ? agent.intents.map((intent) => `<div class="mini-card"><div class="mini-card-head"><span>♧ ${escapeHtml(intent.name)}</span><span class="switch ${intent.enabled ? "on" : ""}" data-switch></span></div><div class="subtle">${escapeHtml(intent.action)}</div></div>`).join("")
+        : `<div class="empty"><div><div style="font-size:48px">🤖</div><div style="margin:10px 0">暂无可用意图，请添加意图</div><button class="button primary">⇩ 导入意图</button><button class="button" data-drawer="intentDrawer">＋ 新增意图</button></div></div>`
+    }`;
 }
 
 function renderIntegrationConfig() {
-  const list = ["网站页面", "抖音私信", "小红书私信", "小红书评论", "企业微信（群聊/私聊）", "微信公众号", "微信客服(企业微信版)", "API接口", "飞书机器人"];
+  const agent = getSelectedAgent();
   return `
     <h3>集成设置 ⓘ</h3>
     <div class="grid-2">
-      ${list
+      ${aiAgentIntegrations
         .map(
-          (name) => `<div class="mini-card" data-page="${name.includes("企业微信") ? "wechat" : ""}"><div class="mini-card-head"><span>${name}</span></div><div class="subtle">快速集成智能助手到${name}</div></div>`
+          (name) => `<div class="mini-card" data-page="${name.includes("企业微信") ? "wechat" : ""}"><div class="mini-card-head"><span>${escapeHtml(name)}</span><span class="tag ${agent.integrations.includes(name) ? "green" : ""}">${agent.integrations.includes(name) ? "已接入" : "未接入"}</span></div><div class="subtle">快速集成智能助手到${escapeHtml(name)}</div></div>`
         )
         .join("")}
     </div>`;
 }
 
 function renderMembersConfig() {
+  const agent = getSelectedAgent();
   return `
     <h3>成员列表 ⓘ</h3>
-    <div class="form-row"><div class="label">可见范围：</div><label><input type="radio" checked> 全部成员</label> &nbsp; <label><input type="radio"> 自定义</label></div>`;
+    <div class="form-row"><div class="label">可见范围：</div><label><input type="radio" checked> 全部成员</label> &nbsp; <label><input type="radio"> 自定义</label></div>
+    ${agent.members.map((member) => `<div class="mini-card"><div class="mini-card-head"><span>♙ ${escapeHtml(member)}</span><span class="tag green">可见</span></div><div class="subtle">可查看并使用此智能体</div></div>`).join("")}`;
 }
 
 function renderToolConfig() {
+  const agent = getSelectedAgent();
+  const bound = aiAgentToolOptions.filter((tool) => agent.toolIds.includes(tool.id));
   return `<div class="detail-config-head"><h3>工具设置 <span class="subtle">ⓘ</span></h3><button class="button dashed small" data-modal="assistantToolPicker">＋ 添加工具</button></div>
-    <div class="detail-tool-empty">
-      <div class="empty-icon">⌘</div>
-      <div>暂未添加工具</div>
-      <button class="button dashed small" data-modal="assistantToolPicker">＋ 添加工具</button>
-    </div>`;
+    ${
+      bound.length
+        ? bound.map((tool) => `<div class="mini-card"><div class="mini-card-head"><span class="agent-tool-title"><span class="skill-logo tiny">${escapeHtml(tool.icon)}</span>${escapeHtml(tool.name)}</span><button class="button ghost small" data-agent-remove-tool="${tool.id}">移除</button></div><div class="subtle">${escapeHtml(tool.action)} · ${escapeHtml(tool.status)}</div></div>`).join("")
+        : `<div class="detail-tool-empty"><div class="empty-icon">⌘</div><div>暂未添加工具</div><button class="button dashed small" data-modal="assistantToolPicker">＋ 添加工具</button></div>`
+    }`;
 }
 
 function renderChatPreview() {
+  const agent = getSelectedAgent();
+  const messages = agent?.messages || state.messages;
   return `
     <div class="chat">
-      ${state.messages
+      ${messages
         .map(
-          (m) => `<div class="message ${m.role === "user" ? "user" : ""}">${iconBox(m.role === "user" ? "K" : "AI")}<div class="bubble">${m.text}${m.meta ? `<div class="bubble-meta">${m.meta}</div>` : ""}</div></div>`
+          (m) => `<div class="message ${m.role === "user" ? "user" : ""}">${iconBox(m.role === "user" ? "K" : "AI")}<div class="bubble">${escapeHtml(m.text)}${m.meta ? `<div class="bubble-meta">${escapeHtml(m.meta)}</div>` : ""}</div></div>`
         )
         .join("")}
+      ${state.agentChatLoading ? `<div class="message">${iconBox("AI")}<div class="bubble">正在检索知识库、技能和工具配置...</div></div>` : ""}
     </div>
     <div class="chat-input">
       <textarea id="assistantInput" placeholder="请输入对话内容"></textarea>

@@ -5,14 +5,18 @@ function renderAgentModal() {
 if (state.modal === "createAssistant") {
     return modal("创建助手", `
       <div class="form-row"><div class="label">助手名称 *</div><input class="input" style="width:100%" id="newAssistantName" placeholder="请输入" value="物流客服助手"></div>
-      <div class="form-row"><div class="label">助手描述</div><textarea class="textarea" style="width:100%" placeholder="助手功能介绍">用于企业微信物流咨询、报价问答和转人工服务</textarea></div>
+      <div class="form-row"><div class="label">助手描述</div><textarea class="textarea" style="width:100%" id="newAssistantDesc" placeholder="助手功能介绍">用于企业微信物流咨询、报价问答和转人工服务</textarea></div>
+      <div class="form-row"><div class="label">模型</div><select class="select" style="width:100%" id="newAssistantModel">${renderSelectOptions(aiAgentModels, aiAgentModels[0])}</select></div>
+      <div class="form-row"><div class="label">开场白</div><textarea class="textarea" style="width:100%" id="newAssistantOpening">Hi~ 我是您的智能助手，想要我协助您完成什么任务？发送消息给我吧！</textarea></div>
       <div class="form-row"><div class="label">助手图标</div>${iconBox("AI")}</div>
-    `, "确认", () => {
-      const name = document.getElementById("newAssistantName").value || "新建助手";
-      state.modal = null;
-      state.selectedAssistant = name;
-      showToast("创建助手成功");
-    });
+    `, "确认", createAgentFromForm);
+  }
+
+if (state.modal === "deleteAssistant") {
+    const agent = getSelectedAgent();
+    return modal("删除智能体", `
+      <div class="danger-modal-text">确认删除「${escapeHtml(agent?.name || "当前智能体")}」吗？删除后，它绑定的知识库、技能、工具和聊天预览记录会从当前 mock 数据中移除。</div>
+    `, "确认删除", deleteSelectedAgent);
   }
 
 if (state.modal === "importSkill") {
@@ -44,22 +48,33 @@ if (state.modal === "addSkillTool") {
   }
 
 if (state.modal === "associateKnowledge") {
+    const agent = getSelectedAgent();
+    if (state.agentModalAgentId !== agent?.id) {
+      state.agentModalAgentId = agent?.id;
+      state.agentModalSelection = [...(agent?.knowledgeBaseIds || [])];
+    }
+    const selected = new Set(state.agentModalSelection);
+    window.__modalOk = () => {
+      if (!agent) return;
+      agent.knowledgeBaseIds = Array.from(selected);
+      state.modal = null;
+      state.agentModalSelection = [];
+      state.agentModalAgentId = null;
+      showToast("知识库绑定已保存");
+    };
     return modal("关联知识库", `
       <div class="knowledge-pick-list">
         ${knowledgeBases
           .map(
             (kb) => `<label class="knowledge-pick-row">
-              <input type="checkbox" checked>
+              <input type="checkbox" data-agent-knowledge-select="${kb.id}" ${selected.has(kb.id) ? "checked" : ""}>
               <span class="knowledge-card-icon small">${kb.icon}</span>
               <span><b>${kb.name}</b><small>${kb.count} · ${kb.type}</small></span>
             </label>`
           )
           .join("")}
       </div>
-    `, "确定", () => {
-      state.modal = null;
-      showToast("知识库已关联");
-    });
+    `, "确定", window.__modalOk);
   }
 
 if (state.modal === "deleteSkill") {
@@ -99,9 +114,17 @@ if (state.modal === "createCustomTool") {
   }
 
 if (state.modal === "assistantToolPicker") {
+    const agent = getSelectedAgent();
+    if (state.agentToolModalAgentId !== agent?.id) {
+      state.agentToolModalAgentId = agent?.id;
+      state.agentToolSelection = [...(agent?.toolIds || [])];
+    }
     window.__modalOk = () => {
+      if (agent) agent.toolIds = [...state.agentToolSelection];
       state.modal = null;
-      showToast("工具已添加到智能体");
+      state.agentToolSelection = [];
+      state.agentToolModalAgentId = null;
+      showToast("工具选择已保存");
     };
     return `<div class="modal-backdrop"><div class="modal assistant-tool-modal">
       <div class="modal-head">添加工具<button class="button ghost" data-close-modal>×</button></div>
@@ -129,6 +152,11 @@ if (state.modal === "assistantToolPicker") {
 }
 
 function renderImportSkillModal() {
+  const agent = getSelectedAgent();
+  if (state.agentSkillModalAgentId !== agent?.id) {
+    state.agentSkillModalAgentId = agent?.id;
+    state.importSkillSelected = [...(agent?.skillIds || [])];
+  }
   const selected = new Set(state.importSkillSelected);
   const importable = skills
     .filter((skill) => skill.source === "mine")
@@ -140,9 +168,11 @@ function renderImportSkillModal() {
     }));
   window.__modalOk = () => {
     if (!state.importSkillSelected.length) return;
+    if (agent) agent.skillIds = Array.from(new Set([...agent.skillIds, ...state.importSkillSelected]));
     const count = state.importSkillSelected.length;
     state.modal = null;
     state.importSkillSelected = [];
+    state.agentSkillModalAgentId = null;
     showToast(`已导入 ${count} 个技能`);
   };
   return `<div class="modal-backdrop skill-import-backdrop">
@@ -183,14 +213,15 @@ function renderImportSkillModal() {
 }
 
 function renderToolPickerAppList() {
-  const apps = ["AI搜索引擎", "集简云数据表", "语聚AI", "微软Bing搜索(内置)", "集简云OCR", "文档文字提取", "Webhook", "飞书即时消息"];
+  const selected = new Set(state.agentToolSelection);
   return `<input class="input tool-picker-search" placeholder="搜索">
     <div class="tool-picker-group-title">精选应用 <span>⌃</span></div>
     <div class="tool-picker-list">
-      ${apps
-        .map((name, index) => `<button class="${index === 0 ? "active" : ""}" data-tool-picker-app="${name}">
-          <span class="tool-mini-icon">${index === 0 ? "搜" : index === 1 ? "表" : index === 2 ? "AI" : index === 6 ? "WH" : "文"}</span>${name}
-        </button>`)
+      ${aiAgentToolOptions
+        .map((tool) => `<label class="${selected.has(tool.id) ? "active" : ""}">
+          <input type="checkbox" data-agent-tool-select="${tool.id}" ${selected.has(tool.id) ? "checked" : ""}>
+          <span class="tool-mini-icon">${escapeHtml(tool.icon)}</span>${escapeHtml(tool.name)} · ${escapeHtml(tool.action)}
+        </label>`)
         .join("")}
     </div>`;
 }
@@ -207,14 +238,9 @@ function renderToolPickerAssistantInfo() {
 }
 
 function renderToolPickerAppMain() {
-  return `<div class="tool-picker-result-card">
-    <span class="tool-mini-icon large">搜</span>
-    <div>
-      <b>AI搜索</b>
-      <p>输入内容进行AI搜索</p>
-    </div>
-  </div>
-  <div class="tool-provider-note">本功能由“集简云嵌入方案”提供</div>`;
+  const selectedTools = aiAgentToolOptions.filter((tool) => state.agentToolSelection.includes(tool.id));
+  return `${selectedTools.length ? selectedTools.map((tool) => `<div class="tool-picker-result-card"><span class="tool-mini-icon large">${escapeHtml(tool.icon)}</span><div><b>${escapeHtml(tool.name)}</b><p>${escapeHtml(tool.action)} · ${escapeHtml(tool.status)}</p></div></div>`).join("") : `<div class="tool-picker-result-card"><span class="tool-mini-icon large">搜</span><div><b>AI搜索</b><p>请选择左侧工具后保存到智能体</p></div></div>`}
+  <div class="tool-provider-note">本功能由“集简云嵌入方案”提供，当前为 mock 选择流程</div>`;
 }
 
 function renderToolPickerAssistantMain() {
