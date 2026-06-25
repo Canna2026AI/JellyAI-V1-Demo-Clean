@@ -14,6 +14,9 @@ function ensureKnowledgeState() {
     knowledgeCreateDraft: {},
     knowledgeCreateName: "",
     knowledgeEditId: null,
+    knowledgeEditName: "",
+    knowledgeEditDescription: "",
+    knowledgeDeleteId: null,
   };
   Object.keys(defaults).forEach((key) => {
     if (typeof state[key] === "undefined") state[key] = defaults[key];
@@ -77,4 +80,8 @@ function knowledgeDefaultChunks(sourceType, name) {
     embedding: "已完成",
     text,
   }));
+}
+
+function knowledgeActionTitle(action, kb) {
+  return `${action}：${kb.name}`;
 }

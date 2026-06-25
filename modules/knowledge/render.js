@@ -15,7 +15,7 @@ function renderKnowledgeManager() {
     sort: state.knowledgeSort,
   });
   const page = knowledgePaginate(rows, state.knowledgePage, state.knowledgePageSize);
-  const selected = knowledgeRuntime.get(state.knowledgeSelectedId) || rows[0] || null;
+  const selected = rows.find((kb) => kb.id === state.knowledgeSelectedId) || rows[0] || null;
   const totalDocs = knowledgeBases.reduce((sum, kb) => sum + kb.documentCount, 0);
   const totalChunks = knowledgeBases.reduce((sum, kb) => sum + kb.chunkCount, 0);
 
@@ -23,7 +23,7 @@ function renderKnowledgeManager() {
     <div class="knowledge-list-head">
       <div>
         <h1 class="page-title">知识库列表</h1>
-        <div class="subtle">您可以通过上传文档，数据库，网站页面等方式创建知识内容，AI应用可以基于此知识进行对话 <button class="link-button">了解更多</button></div>
+        <div class="subtle">您可以通过上传文档，数据库，网站页面等方式创建知识内容，AI应用可以基于此知识进行对话 <button class="link-button" type="button" data-knowledge-docs>了解更多</button></div>
       </div>
       <div class="capacity">空间容量： ${knowledgeTotalSize()} / 1024M</div>
     </div>
@@ -43,7 +43,7 @@ function renderKnowledgeManager() {
         ${knowledgeSortOptions.map((option) => `<option value="${option.id}" ${option.id === state.knowledgeSort ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
       </select>
     </div>
-    ${state.knowledgeLoading ? `<div class="knowledge-loading">Loading...</div>` : ""}
+    ${state.knowledgeLoading ? `<div class="knowledge-loading">加载中...</div>` : ""}
     <div class="knowledge-console">
       <section class="knowledge-list-panel">
         ${page.items.length ? page.items.map(renderKnowledgeListCard).join("") : renderKnowledgeEmpty()}
@@ -76,10 +76,10 @@ function renderKnowledgeListCard(kb) {
     <div class="knowledge-card-footer">
       ${knowledgeEmbeddingTag(kb.embeddingStatus)}
       <div>
-        <button class="button ghost small" data-knowledge-toggle="${escapeHtml(kb.id)}">${kb.enabled ? "停用" : "启用"}</button>
-        <button class="button ghost small" data-knowledge-edit="${escapeHtml(kb.id)}">编辑</button>
-        <button class="button ghost small" data-knowledge-reindex="${escapeHtml(kb.id)}" ${state.knowledgeActionLoadingId === kb.id ? "disabled" : ""}>${state.knowledgeActionLoadingId === kb.id ? "Loading" : "重新索引"}</button>
-        <button class="button ghost small" data-knowledge-delete="${escapeHtml(kb.id)}">删除</button>
+        <button class="button ghost small" title="${escapeHtml(knowledgeActionTitle(kb.enabled ? "停用" : "启用", kb))}" data-knowledge-toggle="${escapeHtml(kb.id)}">${kb.enabled ? "停用" : "启用"}</button>
+        <button class="button ghost small" title="${escapeHtml(knowledgeActionTitle("编辑", kb))}" data-knowledge-edit="${escapeHtml(kb.id)}">编辑</button>
+        <button class="button ghost small" title="${escapeHtml(knowledgeActionTitle("重新索引", kb))}" data-knowledge-reindex="${escapeHtml(kb.id)}" ${state.knowledgeActionLoadingId === kb.id ? "disabled" : ""}>${state.knowledgeActionLoadingId === kb.id ? "索引中" : "重新索引"}</button>
+        <button class="button ghost small" title="${escapeHtml(knowledgeActionTitle("删除", kb))}" data-knowledge-delete="${escapeHtml(kb.id)}">删除</button>
       </div>
     </div>
   </article>`;
@@ -111,9 +111,9 @@ function renderKnowledgeDetail(kb) {
         <p>${escapeHtml(kb.description)}</p>
       </div>
       <div class="knowledge-detail-actions">
-        <button class="button" data-knowledge-toggle="${escapeHtml(kb.id)}">${kb.enabled ? "停用" : "启用"}</button>
-        <button class="button" data-knowledge-edit="${escapeHtml(kb.id)}">编辑</button>
-        <button class="button primary" data-knowledge-reindex="${escapeHtml(kb.id)}">重新索引</button>
+        <button class="button" title="${escapeHtml(knowledgeActionTitle(kb.enabled ? "停用" : "启用", kb))}" data-knowledge-toggle="${escapeHtml(kb.id)}">${kb.enabled ? "停用" : "启用"}</button>
+        <button class="button" title="${escapeHtml(knowledgeActionTitle("编辑", kb))}" data-knowledge-edit="${escapeHtml(kb.id)}">编辑</button>
+        <button class="button primary" title="${escapeHtml(knowledgeActionTitle("重新索引", kb))}" data-knowledge-reindex="${escapeHtml(kb.id)}">${state.knowledgeActionLoadingId === kb.id ? "索引中" : "重新索引"}</button>
       </div>
     </div>
     <div class="knowledge-detail-stats">
@@ -271,7 +271,7 @@ function renderWebsiteUploadStep() {
         <div class="label">支持动态页面内容获取</div>
         <div class="hint">动态页面获取需要使用额外的内容获取工具，有额外费用</div>
       </div>
-      <span class="switch" data-switch></span>
+      <span class="switch" data-switch data-knowledge-dynamic></span>
     </div>
   </div>`;
 }
@@ -279,7 +279,7 @@ function renderWebsiteUploadStep() {
 function renderFileUploadStep() {
   const source = knowledgeSourceById(state.knowledgeCreateType);
   return `<div class="knowledge-form-panel">
-    <div class="upload-drop knowledge-file-drop ${state.knowledgeUpload?.status === "失败" ? "error" : ""}" data-knowledge-file-upload>
+    <div class="upload-drop knowledge-file-drop ${state.knowledgeUpload?.status === "失败" ? "error" : ""}" title="点击或拖拽文件到此处上传" data-knowledge-file-upload>
       <b>将 ${escapeHtml(source.label)} 文件拖拽至此区域或 <span>选择文件上传</span></b>
       <p>支持 PDF、Word、Excel、TXT、CSV。Mock 上传会展示进度、状态和失败提示。</p>
     </div>
@@ -400,7 +400,7 @@ function renderKnowledgeCompleteStep() {
     <div class="complete-summary">
       <div><span>来源</span><b>${escapeHtml(source.label)}</b></div>
       <div><span>分段</span><b>${state.knowledgeSegmentMode === "custom" ? "自定义" : state.knowledgeVectorMode === "row" ? "逐行" : "自动"}</b></div>
-      <div><span>Embedding</span><b>Mock完成</b></div>
+      <div><span>Embedding</span><b>Mock 完成</b></div>
     </div>
   </div>`;
 }

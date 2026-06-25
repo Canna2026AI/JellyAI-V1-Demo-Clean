@@ -543,6 +543,11 @@
   transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
+.knowledge-list-card:hover {
+  border-color: #c8d7f5;
+  box-shadow: 0 8px 18px rgba(16, 24, 40, 0.05);
+}
+
 .knowledge-list-card.active {
   border-color: var(--blue);
   box-shadow: 0 0 0 1px rgba(52, 120, 246, 0.14);
@@ -742,6 +747,57 @@
 
 .knowledge-file-drop.error {
   border-color: var(--red);
+}
+
+.knowledge-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.knowledge-import-card {
+  cursor: pointer;
+  display: grid;
+  gap: 5px;
+}
+
+.knowledge-import-card input {
+  display: none;
+}
+
+.knowledge-import-card.active,
+.knowledge-import-card:has(input:checked) {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px rgba(52, 120, 246, 0.14);
+}
+
+.knowledge-modal-form {
+  display: grid;
+  gap: 14px;
+}
+
+.knowledge-modal-form label {
+  display: grid;
+  gap: 8px;
+  color: #344054;
+  font-size: 13px;
+}
+
+.knowledge-modal-form textarea {
+  min-height: 88px;
+  resize: vertical;
+  padding-top: 10px;
+}
+
+.knowledge-delete-confirm {
+  display: grid;
+  gap: 10px;
+  line-height: 1.6;
+}
+
+.knowledge-delete-confirm p {
+  margin: 0;
+  color: #667085;
 }
 
 @media (max-width: 1180px) {

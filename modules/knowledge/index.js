@@ -23,7 +23,8 @@ const knowledgeRuntime = {
   },
 
   get(id) {
-    return knowledgeBases.find((kb) => kb.id === id) || knowledgeBases[0] || null;
+    if (!id) return knowledgeBases[0] || null;
+    return knowledgeBases.find((kb) => kb.id === id) || null;
   },
 
   create(draft) {

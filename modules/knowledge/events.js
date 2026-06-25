@@ -1,6 +1,7 @@
 // Knowledge base page events.
 
 const bindKnowledgeOriginalAgentEvents = typeof bindAgentEvents === "function" ? bindAgentEvents : null;
+let knowledgeSearchTimer = null;
 
 if (bindKnowledgeOriginalAgentEvents) {
   bindAgentEvents = function bindAgentEventsWithKnowledge() {
@@ -21,11 +22,13 @@ function bindKnowledgeListEvents() {
     search.addEventListener("input", () => {
       state.knowledgeSearchQuery = search.value;
       state.knowledgePage = 1;
-      state.knowledgeLoading = true;
-      render();
-      setTimeout(() => setState({ knowledgeLoading: false }), 220);
+      window.clearTimeout(knowledgeSearchTimer);
+      knowledgeSearchTimer = window.setTimeout(() => setState({ knowledgeLoading: false }), 220);
     });
   }
+
+  const docs = document.querySelector("[data-knowledge-docs]");
+  if (docs) docs.addEventListener("click", () => showToast("知识库后端接入清单已整理在 docs/knowledge-todo.md"));
 
   const status = document.querySelector("[data-knowledge-status]");
   if (status) {
@@ -71,11 +74,12 @@ function bindKnowledgeListEvents() {
       event.stopPropagation();
       const kb = knowledgeRuntime.get(el.dataset.knowledgeEdit);
       if (!kb) return;
-      const nextName = window.prompt("编辑知识库名称", kb.name);
-      if (!nextName || !nextName.trim()) return;
-      knowledgeRuntime.update(kb.id, { name: nextName.trim() });
-      showToast("知识库已保存");
-      setState({ knowledgeSelectedId: kb.id });
+      setState({
+        modal: "knowledgeEdit",
+        knowledgeEditId: kb.id,
+        knowledgeEditName: kb.name,
+        knowledgeEditDescription: kb.description,
+      });
     })
   );
 
@@ -84,10 +88,7 @@ function bindKnowledgeListEvents() {
       event.stopPropagation();
       const kb = knowledgeRuntime.get(el.dataset.knowledgeDelete);
       if (!kb) return;
-      if (!window.confirm(`确认删除知识库“${kb.name}”？`)) return;
-      knowledgeRuntime.remove(kb.id);
-      showToast("知识库已删除");
-      setState({ knowledgeSelectedId: knowledgeBases[0]?.id || null, knowledgePage: 1 });
+      setState({ modal: "knowledgeDelete", knowledgeDeleteId: kb.id });
     })
   );
 
@@ -173,6 +174,13 @@ function bindKnowledgeCreateEvents() {
 
   const templateDownload = document.querySelector("[data-template-download]");
   if (templateDownload) templateDownload.addEventListener("click", () => showToast("正在下载逐行向量示例文件"));
+
+  const dynamicSwitch = document.querySelector("[data-knowledge-dynamic]");
+  if (dynamicSwitch) {
+    dynamicSwitch.addEventListener("click", () => {
+      showToast(dynamicSwitch.classList.contains("on") ? "已开启动态页面采集" : "已关闭动态页面采集");
+    });
+  }
 
   const knowledgePrev = document.querySelector("[data-knowledge-prev]");
   if (knowledgePrev) {
@@ -290,6 +298,7 @@ function startKnowledgeMockUpload(shouldFail, fileName) {
   setState({ knowledgeUpload: upload });
   [35, 68, 100].forEach((progress, index) => {
     setTimeout(() => {
+      if (shouldFail && progress > 68) return;
       if (shouldFail && progress === 68) {
         setState({
           knowledgeUpload: {
