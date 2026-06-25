@@ -438,6 +438,13 @@
   color: #98a2b3;
 }
 
+.dashed-empty.compact-empty {
+  height: auto;
+  min-height: 72px;
+  margin: 10px 0;
+  padding: 12px;
+}
+
 .empty-icon {
   font-size: 30px;
   color: #c4ccd8;

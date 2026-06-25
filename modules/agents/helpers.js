@@ -3,6 +3,14 @@
 function ensureAgentState() {
   if (!state.agentSearchQuery) state.agentSearchQuery = "";
   if (!state.agentStatusFilter) state.agentStatusFilter = "all";
+  if (!state.agentKnowledgeSearchQuery) state.agentKnowledgeSearchQuery = "";
+  if (!state.skillSearchQuery) state.skillSearchQuery = "";
+  if (!state.aiToolSearchQuery) state.aiToolSearchQuery = "";
+  if (!state.importSkillSearchQuery) state.importSkillSearchQuery = "";
+  if (!state.agentToolPickerSearchQuery) state.agentToolPickerSearchQuery = "";
+  if (!state.agentModelSearchQuery) state.agentModelSearchQuery = "";
+  if (!state.agentIntentSearchQuery) state.agentIntentSearchQuery = "";
+  if (!state.agentSummarySearchQuery) state.agentSummarySearchQuery = "";
   if (!state.selectedAgentId && state.selectedAssistant) state.selectedAgentId = state.selectedAssistant;
   if (!state.agentModalSelection) state.agentModalSelection = [];
   if (!state.agentToolSelection) state.agentToolSelection = [];
@@ -16,6 +24,32 @@ function getAgents() {
     const matchesQuery = !query || `${agent.name} ${agent.description}`.toLowerCase().includes(query);
     const matchesStatus = state.agentStatusFilter === "all" || agent.status === state.agentStatusFilter;
     return matchesQuery && matchesStatus;
+  });
+}
+
+function getAgentKnowledgeBases() {
+  ensureAgentState();
+  const query = state.agentKnowledgeSearchQuery.trim().toLowerCase();
+  return knowledgeBases.filter((kb) => !query || `${kb.name} ${kb.type} ${kb.count}`.toLowerCase().includes(query));
+}
+
+function getFilteredSkills() {
+  ensureAgentState();
+  const query = state.skillSearchQuery.trim().toLowerCase();
+  return skills.filter((skill) => {
+    const matchesFilter = state.skillFilter === "all" || skill.source === state.skillFilter;
+    const matchesQuery = !query || `${skill.name} ${skill.desc} ${skill.channel}`.toLowerCase().includes(query);
+    return matchesFilter && matchesQuery;
+  });
+}
+
+function getFilteredAiTools() {
+  ensureAgentState();
+  const query = state.aiToolSearchQuery.trim().toLowerCase();
+  return aiTools.filter((tool) => {
+    const matchesFilter = state.aiToolFilter !== "connected" || tool.connected;
+    const matchesQuery = !query || `${tool.name} ${tool.status} ${tool.icon}`.toLowerCase().includes(query);
+    return matchesFilter && matchesQuery;
   });
 }
 
@@ -142,6 +176,53 @@ function saveAgentSettings() {
   state.detailModelOpen = false;
   state.agentSettingsDraft = null;
   showToast("模型配置已保存");
+  render();
+}
+
+function saveSkillFromEditor() {
+  const existing = skills.find((item) => item.id === state.selectedSkillId);
+  const name = document.getElementById("skillNameInput")?.value.trim() || "未命名技能";
+  const desc = document.getElementById("skillDescInput")?.value.trim() || "用于补充智能体执行能力";
+  const prompt = document.getElementById("skillPromptInput")?.textContent.trim() || "请描述技能触发条件与执行步骤。";
+  if (existing) {
+    Object.assign(existing, { name, desc, prompt });
+    showToast("技能已保存");
+  } else {
+    const id = `skill-${Date.now()}`;
+    skills.unshift({
+      id,
+      name,
+      desc,
+      channel: "通用",
+      source: "mine",
+      icon: "AI",
+      tool: false,
+      prompt,
+    });
+    showToast("技能已创建并启用");
+  }
+  state.page = "ai";
+  state.assistantSub = "skill";
+  state.selectedSkillId = null;
+  state.skillFilter = "all";
+  state.skillSearchQuery = "";
+  render();
+}
+
+function createCustomToolFromForm() {
+  const name = document.getElementById("customToolName")?.value.trim() || "内部订单查询";
+  const desc = document.getElementById("customToolDesc")?.value.trim() || "根据订单号查询物流轨迹、费用和签收状态。";
+  aiTools.unshift({
+    name,
+    status: "已创建 · 待授权",
+    icon: name.slice(0, 2).toUpperCase(),
+    connected: false,
+    desc,
+  });
+  state.modal = null;
+  state.aiToolFilter = "all";
+  state.aiToolSearchQuery = "";
+  showToast("自定义工具已创建");
   render();
 }
 

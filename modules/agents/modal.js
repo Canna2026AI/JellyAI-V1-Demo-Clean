@@ -60,6 +60,7 @@ if (state.modal === "associateKnowledge") {
       state.modal = null;
       state.agentModalSelection = [];
       state.agentModalAgentId = null;
+      state.agentKnowledgeSearchQuery = "";
       showToast("知识库绑定已保存");
     };
     return modal("关联知识库", `
@@ -100,17 +101,14 @@ if (state.modal === "deleteKnowledge") {
 
 if (state.modal === "createCustomTool") {
     return modal("创建自定义工具", `
-      <div class="form-row"><div class="label">工具名称 <span style="color:var(--red)">*</span></div><input class="input" style="width:100%" placeholder="请输入工具名称" value="内部订单查询"></div>
-      <div class="form-row"><div class="label">工具描述</div><textarea class="textarea" style="width:100%" placeholder="描述工具用途">根据订单号查询物流轨迹、费用和签收状态。</textarea></div>
+      <div class="form-row"><div class="label">工具名称 <span style="color:var(--red)">*</span></div><input class="input" id="customToolName" style="width:100%" placeholder="请输入工具名称" value="内部订单查询"></div>
+      <div class="form-row"><div class="label">工具描述</div><textarea class="textarea" id="customToolDesc" style="width:100%" placeholder="描述工具用途">根据订单号查询物流轨迹、费用和签收状态。</textarea></div>
       <div class="grid-2">
         <div class="form-row"><div class="label">授权方式</div><select class="select" style="width:100%"><option>无需授权</option><option>API Key</option><option>OAuth2</option></select></div>
         <div class="form-row"><div class="label">请求方式</div><select class="select" style="width:100%"><option>GET</option><option>POST</option><option>PUT</option></select></div>
       </div>
       <div class="form-row"><div class="label">API 地址</div><input class="input" style="width:100%" value="https://api.example.com/orders/{order_no}"></div>
-    `, "创建", () => {
-      state.modal = null;
-      showToast("自定义工具已创建");
-    });
+    `, "创建", createCustomToolFromForm);
   }
 
 if (state.modal === "assistantToolPicker") {
@@ -124,6 +122,7 @@ if (state.modal === "assistantToolPicker") {
       state.modal = null;
       state.agentToolSelection = [];
       state.agentToolModalAgentId = null;
+      state.agentToolPickerSearchQuery = "";
       showToast("工具选择已保存");
     };
     return `<div class="modal-backdrop"><div class="modal assistant-tool-modal">
@@ -158,8 +157,10 @@ function renderImportSkillModal() {
     state.importSkillSelected = [...(agent?.skillIds || [])];
   }
   const selected = new Set(state.importSkillSelected);
+  const query = state.importSkillSearchQuery.trim().toLowerCase();
   const importable = skills
     .filter((skill) => skill.source === "mine")
+    .filter((skill) => !query || `${skill.name} ${skill.desc}`.toLowerCase().includes(query))
     .slice(0, 6)
     .map((skill, index) => ({
       ...skill,
@@ -173,6 +174,7 @@ function renderImportSkillModal() {
     state.modal = null;
     state.importSkillSelected = [];
     state.agentSkillModalAgentId = null;
+    state.importSkillSearchQuery = "";
     showToast(`已导入 ${count} 个技能`);
   };
   return `<div class="modal-backdrop skill-import-backdrop">
@@ -185,12 +187,14 @@ function renderImportSkillModal() {
         <button class="button ghost skill-import-close" data-close-modal>×</button>
       </div>
       <div class="skill-import-search">
-        <input class="input" placeholder="搜索技能名称或描述...">
+        <input class="input" data-import-skill-search placeholder="搜索技能名称或描述..." value="${escapeHtml(state.importSkillSearchQuery)}">
       </div>
       <div class="skill-import-list">
-        ${importable
-          .map(
-            (skill) => `<label class="skill-import-row ${selected.has(skill.id) ? "selected" : ""}">
+        ${
+          importable.length
+            ? importable
+                .map(
+                  (skill) => `<label class="skill-import-row ${selected.has(skill.id) ? "selected" : ""}">
               <input type="checkbox" data-import-skill-select="${skill.id}" ${selected.has(skill.id) ? "checked" : ""}>
               <div class="skill-import-copy">
                 <div><b>${skill.name}</b><span class="tag blue">通用</span></div>
@@ -198,8 +202,10 @@ function renderImportSkillModal() {
               </div>
               <span class="skill-import-app ${skill.iconClass}">${skill.importIcon}</span>
             </label>`
-          )
-          .join("")}
+                )
+                .join("")
+            : `<div class="dashed-empty compact-empty"><span>暂无匹配技能</span></div>`
+        }
       </div>
       <div class="skill-import-foot">
         <span>${state.importSkillSelected.length ? `已选择 ${state.importSkillSelected.length} 个技能` : "请勾选要导入的技能"}</span>
@@ -214,15 +220,21 @@ function renderImportSkillModal() {
 
 function renderToolPickerAppList() {
   const selected = new Set(state.agentToolSelection);
-  return `<input class="input tool-picker-search" placeholder="搜索">
+  const query = state.agentToolPickerSearchQuery.trim().toLowerCase();
+  const tools = aiAgentToolOptions.filter((tool) => !query || `${tool.name} ${tool.action} ${tool.status}`.toLowerCase().includes(query));
+  return `<input class="input tool-picker-search" data-tool-picker-search placeholder="搜索" value="${escapeHtml(state.agentToolPickerSearchQuery)}">
     <div class="tool-picker-group-title">精选应用 <span>⌃</span></div>
     <div class="tool-picker-list">
-      ${aiAgentToolOptions
-        .map((tool) => `<label class="${selected.has(tool.id) ? "active" : ""}">
+      ${
+        tools.length
+          ? tools
+              .map((tool) => `<label class="${selected.has(tool.id) ? "active" : ""}">
           <input type="checkbox" data-agent-tool-select="${tool.id}" ${selected.has(tool.id) ? "checked" : ""}>
           <span class="tool-mini-icon">${escapeHtml(tool.icon)}</span>${escapeHtml(tool.name)} · ${escapeHtml(tool.action)}
         </label>`)
-        .join("")}
+              .join("")
+          : `<div class="dashed-empty compact-empty"><span>暂无匹配工具</span></div>`
+      }
     </div>`;
 }
 
@@ -233,7 +245,7 @@ function renderToolPickerAssistantInfo() {
       <i></i><i></i><i></i>
     </div>
     <h3>将语聚GPTs作为工具</h3>
-    <p>支持使用其它语聚GPTs作为工具使用，设置工具描述后AI模型将根据对话内容自主选择和使用此工具 <button class="link-button">了解更多</button></p>
+    <p>支持使用其它语聚GPTs作为工具使用，设置工具描述后AI模型将根据对话内容自主选择和使用此工具 <button class="link-button" data-demo-action="查看助手作为工具说明">了解更多</button></p>
   </div>`;
 }
 
@@ -272,13 +284,13 @@ if (state.drawer === "intentBuilder") {
         <div class="form-row"><div class="label">名称<span style="color:var(--red)">*</span></div><input class="input" style="width:100%" value="回复文本内容"></div>
         <div class="form-row"><div class="label">处理方式<span style="color:var(--red)">*</span></div><select class="select" style="width:100%"><option>A: 回复文本内容</option><option>转入人工</option><option>调用技能</option></select></div>
         <div class="skill-editor">
-          <div class="editor-toolbar skill-editor-toolbar"><b>B</b><b>H</b><span>▣</span><span>☷</span><span>☰</span><button class="link-button">〔x〕 插入变量</button></div>
+          <div class="editor-toolbar skill-editor-toolbar"><b>B</b><b>H</b><span>▣</span><span>☷</span><span>☰</span><button class="link-button" data-demo-action="插入意图变量">〔x〕 插入变量</button></div>
           <div class="rich-editor skill-rich-editor" contenteditable="true"></div>
         </div>
       </div>
-      <button class="link-button add-action-link">＋ 新增处理方式</button>
+      <button class="link-button add-action-link" data-demo-action="新增意图处理方式">＋ 新增处理方式</button>
       <div class="label" style="margin-top:18px">意图未匹配后的处理方式</div>
-      <button class="link-button add-action-link">＋ 新增处理方式</button>
+      <button class="link-button add-action-link" data-demo-action="新增未匹配处理方式">＋ 新增处理方式</button>
     `);
   }
 

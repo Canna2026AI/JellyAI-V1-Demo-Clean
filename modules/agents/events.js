@@ -1,20 +1,30 @@
 // AI agents page and modal events.
 
+function bindAgentSearchInput(selector, stateKey, options = {}) {
+  const input = document.querySelector(selector);
+  if (!input) return;
+  input.addEventListener("input", () => {
+    const cursor = input.selectionStart || input.value.length;
+    options.beforeRender?.();
+    state[stateKey] = input.value;
+    render();
+    const nextInput = document.querySelector(selector);
+    if (nextInput) {
+      nextInput.focus();
+      nextInput.setSelectionRange(cursor, cursor);
+    }
+  });
+}
+
 function bindAgentEvents() {
   ensureAgentState();
-  const searchInput = document.querySelector("[data-agent-search]");
-  if (searchInput) {
-    searchInput.addEventListener("input", () => {
-      const cursor = searchInput.selectionStart || searchInput.value.length;
-      state.agentSearchQuery = searchInput.value;
-      render();
-      const nextInput = document.querySelector("[data-agent-search]");
-      if (nextInput) {
-        nextInput.focus();
-        nextInput.setSelectionRange(cursor, cursor);
-      }
-    });
-  }
+  bindAgentSearchInput("[data-agent-search]", "agentSearchQuery");
+  bindAgentSearchInput("[data-agent-knowledge-search]", "agentKnowledgeSearchQuery");
+  bindAgentSearchInput("[data-skill-search]", "skillSearchQuery");
+  bindAgentSearchInput("[data-ai-tool-search]", "aiToolSearchQuery");
+  bindAgentSearchInput("[data-agent-intent-search]", "agentIntentSearchQuery");
+  bindAgentSearchInput("[data-agent-summary-search]", "agentSummarySearchQuery");
+  bindAgentSearchInput("[data-agent-model-search]", "agentModelSearchQuery", { beforeRender: captureAgentSettingsDraft });
   document.querySelectorAll("[data-agent-filter]").forEach((el) =>
     el.addEventListener("click", () => setState({ agentStatusFilter: el.dataset.agentFilter }))
   );
@@ -93,8 +103,7 @@ document.querySelectorAll("[data-skill-filter]").forEach((el) =>
   );
   const skillSave = document.querySelector("[data-skill-save]");
   if (skillSave) skillSave.addEventListener("click", () => {
-    showToast(state.selectedSkillId ? "技能已保存" : "技能已创建并启用");
-    setState({ page: "ai", assistantSub: "skill", selectedSkillId: null });
+    saveSkillFromEditor();
   });
   document.querySelectorAll("[data-ai-tool-filter]").forEach((el) =>
     el.addEventListener("click", () => setState({ aiToolFilter: el.dataset.aiToolFilter }))
@@ -110,6 +119,9 @@ document.querySelectorAll("[data-skill-filter]").forEach((el) =>
       setState({ page: "ai", assistantSub: "auto" });
     });
   }
+  document.querySelectorAll("[data-automation-toggle]").forEach((el) =>
+    el.addEventListener("click", () => showToast(`${el.dataset.automationToggle}已更新`))
+  );
 
   const assistantInput = document.getElementById("assistantInput");
   if (assistantInput) {
@@ -132,6 +144,9 @@ function bindAgentModalEvents() {
       state.agentModalAgentId = null;
       state.agentToolModalAgentId = null;
       state.agentSkillModalAgentId = null;
+      state.importSkillSearchQuery = "";
+      state.agentToolPickerSearchQuery = "";
+      state.agentModelSearchQuery = "";
     })
   );
   document.querySelectorAll("[data-import-skill-select]").forEach((el) =>
@@ -143,6 +158,8 @@ function bindAgentModalEvents() {
       setState({ importSkillSelected: Array.from(selected) });
     })
   );
+  bindAgentSearchInput("[data-import-skill-search]", "importSkillSearchQuery");
+  bindAgentSearchInput("[data-tool-picker-search]", "agentToolPickerSearchQuery");
   document.querySelectorAll("[data-agent-knowledge-select]").forEach((el) =>
     el.addEventListener("change", () => {
       const selected = new Set(state.agentModalSelection);

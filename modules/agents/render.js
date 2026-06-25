@@ -49,7 +49,7 @@ function renderAssistantManager() {
           .map(([id, label]) => `<button class="${state.agentStatusFilter === id ? "active" : ""}" data-agent-filter="${id}">${label}</button>`)
           .join("")}
       </div>
-      <button class="link-button">帮助文档</button>
+      <button class="link-button" data-demo-action="打开 AI 智能体帮助文档">帮助文档</button>
     </div>
     <div class="assistant-card-row">
       ${
@@ -77,20 +77,21 @@ function renderAssistantManager() {
 }
 
 function renderKnowledgeManager() {
+  const filteredKnowledgeBases = getAgentKnowledgeBases();
   return `<div class="module-content ai-manager-page">
     <div class="knowledge-list-head">
       <div>
         <h1 class="page-title">知识库列表</h1>
-        <div class="subtle">您可以通过上传文档，数据库，网站页面等方式创建知识内容，AI应用可以基于此知识进行对话 <button class="link-button">了解更多</button></div>
+        <div class="subtle">您可以通过上传文档，数据库，网站页面等方式创建知识内容，AI应用可以基于此知识进行对话 <button class="link-button" data-demo-action="查看知识库说明">了解更多</button></div>
       </div>
       <div class="capacity">空间容量： 12.96KB / 1024M</div>
     </div>
     <div class="knowledge-tools">
       <button class="button primary" data-page="knowledgeCreate">＋ 新增知识库</button>
-      <input class="input search-input" placeholder="搜索名称" />
+      <input class="input search-input" data-agent-knowledge-search placeholder="搜索名称" value="${escapeHtml(state.agentKnowledgeSearchQuery)}" />
     </div>
     <div class="knowledge-card-grid">
-      ${knowledgeBases.map(renderKnowledgeCard).join("")}
+      ${filteredKnowledgeBases.length ? filteredKnowledgeBases.map(renderKnowledgeCard).join("") : `<div class="card empty agent-empty-state"><b>暂无知识库</b><span>请调整搜索条件或新增知识库。</span><button class="button primary" data-page="knowledgeCreate">＋ 新增知识库</button></div>`}
     </div>
   </div>`;
 }
@@ -111,11 +112,7 @@ function renderKnowledgeCard(kb) {
 }
 
 function renderSkillManager() {
-  const filtered = skills.filter((skill) => {
-    if (state.skillFilter === "mine") return skill.source === "mine";
-    if (state.skillFilter === "template") return skill.source === "template";
-    return true;
-  });
+  const filtered = getFilteredSkills();
   return `<div class="module-content skill-manager-page">
     <div class="skill-page-head">
       <h1 class="page-title">AI技能</h1>
@@ -124,7 +121,7 @@ function renderSkillManager() {
     ${state.skillGuideVisible ? renderSkillGuide() : ""}
     <div class="skill-toolbar">
       <button class="button dark" data-skill-create>＋ 创建技能</button>
-      <input class="input skill-search" placeholder="搜索技能名称或描述" />
+      <input class="input skill-search" data-skill-search placeholder="搜索技能名称或描述" value="${escapeHtml(state.skillSearchQuery)}" />
       <div class="skill-filter-tabs">
         ${[
           ["all", "全部技能"],
@@ -137,7 +134,7 @@ function renderSkillManager() {
       <button class="select-like skill-channel" data-skill-channel><span>全部渠道</span><span>⌄</span></button>
     </div>
     <div class="skill-grid">
-      ${filtered.map(renderSkillCard).join("")}
+      ${filtered.length ? filtered.map(renderSkillCard).join("") : `<div class="card empty agent-empty-state"><b>暂无技能</b><span>请调整筛选条件，或创建一个新技能。</span><button class="button dark" data-skill-create>＋ 创建技能</button></div>`}
     </div>
   </div>`;
 }
@@ -159,7 +156,7 @@ function renderSkillGuide() {
             <div>
               <h3>${title}</h3>
               <p>${desc}</p>
-              <button class="link-button">${action} ↗</button>
+              <button class="link-button" data-demo-action="${title}">${action} ↗</button>
             </div>
           </div>`
         )
@@ -187,7 +184,7 @@ function renderAiPlaceholder() {
 }
 
 function renderToolManager() {
-  const filtered = aiTools.filter((tool) => (state.aiToolFilter === "connected" ? tool.connected : true));
+  const filtered = getFilteredAiTools();
   return `<div class="module-content tool-manager-page">
     <div class="skill-page-head">
       <h1 class="page-title">AI工具</h1>
@@ -196,7 +193,7 @@ function renderToolManager() {
     ${state.aiToolGuideVisible ? renderToolGuide() : ""}
     <div class="tool-toolbar">
       <button class="button dark" data-modal="createCustomTool">＋ 创建自定义工具</button>
-      <input class="input tool-search" placeholder="搜索应用或动作" />
+      <input class="input tool-search" data-ai-tool-search placeholder="搜索应用或动作" value="${escapeHtml(state.aiToolSearchQuery)}" />
       <div class="skill-filter-tabs">
         ${[
           ["all", "全部"],
@@ -205,10 +202,10 @@ function renderToolManager() {
           .map(([id, label]) => `<button class="${state.aiToolFilter === id ? "active" : ""}" data-ai-tool-filter="${id}">${label}</button>`)
           .join("")}
       </div>
-      <button class="select-like tool-category"><span>全部类别</span><span>⌄</span></button>
+      <button class="select-like tool-category" data-ai-tool-category><span>全部类别</span><span>⌄</span></button>
     </div>
     <div class="tool-grid">
-      ${filtered.map(renderToolCard).join("")}
+      ${filtered.length ? filtered.map(renderToolCard).join("") : `<div class="card empty agent-empty-state"><b>暂无工具</b><span>请调整搜索条件，或创建自定义工具。</span><button class="button dark" data-modal="createCustomTool">＋ 创建自定义工具</button></div>`}
     </div>
   </div>`;
 }
@@ -230,7 +227,7 @@ function renderToolGuide() {
             <div>
               <h3>${title}</h3>
               <p>${desc}</p>
-              <button class="link-button">${action} ↗</button>
+              <button class="link-button" data-demo-action="${title}">${action} ↗</button>
             </div>
           </div>`
         )
@@ -240,7 +237,7 @@ function renderToolGuide() {
 }
 
 function renderToolCard(tool) {
-  return `<div class="tool-card">
+  return `<div class="tool-card" data-demo-action="查看工具：${escapeHtml(tool.name)}">
     <div class="tool-card-main">
       <div class="tool-app-icon">${tool.icon}</div>
       <h3>${tool.name}</h3>
@@ -260,7 +257,7 @@ function renderAutomationManager() {
     <div class="automation-list">
       ${automationItems
         .map(
-          ([title, desc], index) => `<button class="automation-row" type="button">
+          ([title, desc], index) => `<button class="automation-row" type="button" data-automation-toggle="${title}">
             <div>
               <div class="automation-title">${title} <span class="switch ${index === 5 ? "on" : ""}" data-switch></span> <span class="collapse-mark">⌃</span></div>
               <div class="hint">${desc} <span class="link-blue">了解更多</span></div>
@@ -273,13 +270,14 @@ function renderAutomationManager() {
 }
 
 function renderIntentManager() {
+  ensureAgentState();
   return `<div class="module-content intent-page">
     <div class="intent-top-title">意图中心</div>
     <h1 class="page-title">意图列表</h1>
-    <div class="subtle intent-desc">您可以通过创建意图的方式来控制回答内容与对话流程，当用户的对话内容满足指定意图后，将优先按照意图设置执行。 <button class="link-button">了解更多</button></div>
+    <div class="subtle intent-desc">您可以通过创建意图的方式来控制回答内容与对话流程，当用户的对话内容满足指定意图后，将优先按照意图设置执行。 <button class="link-button" data-demo-action="查看意图中心说明">了解更多</button></div>
     <div class="intent-toolbar">
       <button class="button primary" data-drawer="intentBuilder">＋ 添加意图</button>
-      <input class="input search-input" placeholder="搜索名称" />
+      <input class="input search-input" data-agent-intent-search placeholder="搜索名称" value="${escapeHtml(state.agentIntentSearchQuery)}" />
     </div>
     <div class="intent-empty">
       <div class="intent-illus">▰</div>
@@ -290,17 +288,18 @@ function renderIntentManager() {
 }
 
 function renderAiSummaryManager() {
+  ensureAgentState();
   return `<div class="module-content summary-page">
     <div class="summary-layout">
       <aside class="summary-subnav">
         <div class="summary-side-title">总结类型</div>
-        <button class="summary-side-item active">AI智能总结</button>
+        <button class="summary-side-item active" data-demo-action="切换总结类型">AI智能总结</button>
       </aside>
       <main class="summary-main">
         <h1 class="page-title">AI智能总结 · AI智能总结</h1>
         <div class="summary-table-card">
           <div class="summary-toolbar">
-            <input class="input summary-search" placeholder="搜索关键词" />
+            <input class="input summary-search" data-agent-summary-search placeholder="搜索关键词" value="${escapeHtml(state.agentSummarySearchQuery)}" />
           </div>
           <table class="summary-table">
             <thead>
@@ -316,9 +315,9 @@ function renderAiSummaryManager() {
           <div class="summary-pagination">
             <span>共 0 条</span>
             <button class="button small" disabled>‹</button>
-            <button class="button small active">1</button>
+            <button class="button small active" data-demo-action="当前页码">1</button>
             <button class="button small" disabled>›</button>
-            <button class="select-like small-select">10条/页 ⌄</button>
+            <button class="select-like small-select" data-demo-action="切换分页条数">10条/页 ⌄</button>
             <span>前往</span><input class="input page-input" value="1"><span>页</span>
           </div>
         </div>
@@ -334,7 +333,7 @@ function renderSkillEditPage() {
     <div class="skill-edit-top">
       <div class="breadcrumb"><button class="link-button" data-back-skills>AI技能</button> › ${isEdit ? skill.name : "技能配置"}</div>
       <div class="skill-edit-actions">
-        ${isEdit ? `<button class="button">历史版本</button>` : `<button class="button" data-back-skills>取消</button>`}
+        ${isEdit ? `<button class="button" data-demo-action="查看技能历史版本">历史版本</button>` : `<button class="button" data-back-skills>取消</button>`}
         <button class="button dark" data-skill-save>${isEdit ? "保存" : "创建并启用"}</button>
       </div>
     </div>
@@ -342,22 +341,22 @@ function renderSkillEditPage() {
       <div class="skill-edit-card">
         <div class="form-row">
           <div class="label">技能名称 <span style="color:var(--red)">*</span></div>
-          <input class="input" style="width:100%" value="${skill?.name || ""}" placeholder="请输入技能名称，例如：智能催单跟进">
+          <input class="input" id="skillNameInput" style="width:100%" value="${escapeHtml(skill?.name || "")}" placeholder="请输入技能名称，例如：智能催单跟进">
           <div class="hint">清晰的名称帮助团队快速识别此技能的用途</div>
         </div>
         <div class="form-row">
           <div class="label">技能描述</div>
-          <textarea class="textarea" style="width:100%" placeholder="例如：当用户询问订单状态或物流信息时，自动调用订单查询工具获取信息并回复">${skill?.desc || ""}</textarea>
+          <textarea class="textarea" id="skillDescInput" style="width:100%" placeholder="例如：当用户询问订单状态或物流信息时，自动调用订单查询工具获取信息并回复">${escapeHtml(skill?.desc || "")}</textarea>
           <div class="hint">告知 AI 大模型这个技能的用途以及何时触发，帮助模型准确理解和执行</div>
         </div>
         <div class="skill-edit-divider"></div>
         <div class="form-row">
           <div class="label">模型选择</div>
-          <div class="model-select-row"><span class="model-dot">山</span><span>自动选择 doubao-seed-2.0-mini-260215</span><span class="tag orange">内置</span><button class="button ghost small">☷</button></div>
+          <div class="model-select-row"><span class="model-dot">山</span><span>自动选择 doubao-seed-2.0-mini-260215</span><span class="tag orange">内置</span><button class="button ghost small" data-demo-action="选择技能模型">☷</button></div>
         </div>
         <div class="form-row">
           <div class="label">触发对话渠道</div>
-          <button class="select-like full-select"><span>通用</span><span>⌄</span></button>
+          <button class="select-like full-select" data-demo-action="选择技能渠道"><span>通用</span><span>⌄</span></button>
         </div>
         <div class="skill-edit-divider"></div>
         <div class="form-row">
@@ -383,8 +382,8 @@ function renderSkillEditPage() {
 function renderSkillEditor(skill) {
   const prompt = skill?.prompt || "";
   return `<div class="skill-editor">
-    <div class="editor-toolbar skill-editor-toolbar"><b>B</b><b>H</b><span>▣</span><span>☷</span><span>☰</span><button class="link-button">〔x〕 插入变量</button><span style="margin-left:auto">↗</span></div>
-    <div class="rich-editor skill-rich-editor" contenteditable="true">${prompt || ""}</div>
+    <div class="editor-toolbar skill-editor-toolbar"><b>B</b><b>H</b><span>▣</span><span>☷</span><span>☰</span><button class="link-button" data-demo-action="插入技能变量">〔x〕 插入变量</button><span style="margin-left:auto">↗</span></div>
+    <div class="rich-editor skill-rich-editor" id="skillPromptInput" contenteditable="true">${escapeHtml(prompt || "")}</div>
   </div>`;
 }
 
@@ -393,7 +392,7 @@ function renderSkillToolItem() {
     <div class="skill-logo tiny">企</div>
     <div><b>企业微信(代运营)</b><div class="hint">发送消息</div></div>
     <span class="tag green">已配置</span>
-    <button class="button ghost small">×</button>
+    <button class="button ghost small" data-demo-action="移除技能工具">×</button>
   </div>`;
 }
 
@@ -414,7 +413,7 @@ function renderAssistantDetail() {
         </div>
         <div class="assistant-detail-actions">
           <button class="button" data-agent-status-toggle="${agent.id}">${agent.status === "enabled" ? "停用" : "启用"}</button>
-          <button class="button primary">↗ 已分享</button>
+          <button class="button primary" data-demo-action="分享智能体">↗ 已分享</button>
         </div>
       </div>
       <div class="tabs">
@@ -474,7 +473,7 @@ function renderSettingConfig() {
       ${state.detailModelOpen ? renderDetailModelPanel() : ""}
     </div>
     <div class="form-row">
-      <div class="label">功能与步骤设置 <span class="subtle">ⓘ</span><button class="link-button detail-expand">展开</button></div>
+      <div class="label">功能与步骤设置 <span class="subtle">ⓘ</span><button class="link-button detail-expand" data-detail-action="展开步骤设置">展开</button></div>
       <div class="editor-toolbar detail-toolbar"><b>B</b><b>H</b><span>▣</span><span>☰</span><span>1₂</span><button class="link-button" data-detail-action="智能优化">◎ 智能优化</button><button class="link-button" data-detail-action="插入变量">〔x〕 插入变量</button></div>
       <div class="rich-editor detail-prompt" id="agentPromptInput" contenteditable="true">${escapeHtml(draft.prompt)}</div>
       <div class="detail-examples">示例： <b>广告文案大师</b> <b>解梦大师</b></div>
@@ -490,12 +489,14 @@ function renderSettingConfig() {
 function renderDetailModelPanel() {
   const agent = getSelectedAgent();
   const draft = getAgentSettingsDraft(agent);
+  const query = state.agentModelSearchQuery.trim().toLowerCase();
+  const models = aiAgentModels.filter((name) => !query || name.toLowerCase().includes(query));
   return `<div class="detail-model-panel">
     <div class="model-panel-select"><span class="model-dot">山</span>${escapeHtml(draft.model)} <span>⌃</span></div>
-    <div class="model-panel-tabs"><button class="active">内置</button><button>原生</button><button>智能体</button></div>
-    <input class="input" placeholder="搜索模型">
+    <div class="model-panel-tabs"><button class="active" data-demo-action="切换内置模型">内置</button><button data-demo-action="切换原生模型">原生</button><button data-demo-action="切换智能体模型">智能体</button></div>
+    <input class="input" data-agent-model-search placeholder="搜索模型" value="${escapeHtml(state.agentModelSearchQuery)}">
     <div class="model-list-title">推荐模型</div>
-    ${aiAgentModels.map((name) => `<button class="model-option ${draft.model === name ? "active" : ""}" data-detail-model="${escapeHtml(name)}"><span class="model-dot">山</span>${escapeHtml(name)}<span>${draft.model === name ? "✓" : ""}</span></button>`).join("")}
+    ${models.length ? models.map((name) => `<button class="model-option ${draft.model === name ? "active" : ""}" data-detail-model="${escapeHtml(name)}"><span class="model-dot">山</span>${escapeHtml(name)}<span>${draft.model === name ? "✓" : ""}</span></button>`).join("") : `<div class="dashed-empty compact-empty"><span>暂无匹配模型</span></div>`}
   </div>`;
 }
 
@@ -503,7 +504,7 @@ function renderKnowledgeConfig() {
   const agent = getSelectedAgent();
   const bound = knowledgeBases.filter((kb) => agent.knowledgeBaseIds.includes(kb.id));
   return `
-    <div class="toolbar" style="margin-bottom:12px"><h3>知识设置 ⓘ</h3><button class="button ghost">⚙ 配置</button></div>
+    <div class="toolbar" style="margin-bottom:12px"><h3>知识设置 ⓘ</h3><button class="button ghost" data-demo-action="配置知识检索规则">⚙ 配置</button></div>
     <div style="display:flex; gap:8px; margin-bottom:14px"><button class="button primary" data-modal="associateKnowledge">⇩ 绑定知识库</button><button class="button" data-page="knowledgeCreate">＋ 新增知识库</button></div>
     ${
       bound.length
@@ -521,7 +522,7 @@ function renderSkillConfig() {
   const bound = skills.filter((skill) => agent.skillIds.includes(skill.id));
   return `
     <div class="toolbar" style="margin-bottom:12px"><h3>技能设置 ⓘ</h3></div>
-    <div style="display:flex; gap:8px; margin-bottom:14px"><button class="button dark" data-modal="importSkill">⇩ 导入技能</button><button class="button">▦ 技能模板</button></div>
+    <div style="display:flex; gap:8px; margin-bottom:14px"><button class="button dark" data-modal="importSkill">⇩ 导入技能</button><button class="button" data-demo-action="打开技能模板">▦ 技能模板</button></div>
     ${
       bound.length
         ? bound
@@ -541,7 +542,7 @@ function renderFlowConfig() {
         <div style="font-size:48px">🧩</div>
         <div style="margin:10px 0">暂未添加流程</div>
         <button class="button primary" data-page="flow">＋ 创建流程</button>
-        <button class="button">⇩ 导入流程</button>
+        <button class="button" data-demo-action="导入流程">⇩ 导入流程</button>
       </div>
     </div>`;
 }
@@ -553,7 +554,7 @@ function renderIntentConfig() {
     ${
       agent.intents.length
         ? agent.intents.map((intent) => `<div class="mini-card"><div class="mini-card-head"><span>♧ ${escapeHtml(intent.name)}</span><span class="switch ${intent.enabled ? "on" : ""}" data-switch></span></div><div class="subtle">${escapeHtml(intent.action)}</div></div>`).join("")
-        : `<div class="empty"><div><div style="font-size:48px">🤖</div><div style="margin:10px 0">暂无可用意图，请添加意图</div><button class="button primary">⇩ 导入意图</button><button class="button" data-drawer="intentDrawer">＋ 新增意图</button></div></div>`
+        : `<div class="empty"><div><div style="font-size:48px">🤖</div><div style="margin:10px 0">暂无可用意图，请添加意图</div><button class="button primary" data-demo-action="导入意图">⇩ 导入意图</button><button class="button" data-drawer="intentDrawer">＋ 新增意图</button></div></div>`
     }`;
 }
 
@@ -564,7 +565,7 @@ function renderIntegrationConfig() {
     <div class="grid-2">
       ${aiAgentIntegrations
         .map(
-          (name) => `<div class="mini-card" data-page="${name.includes("企业微信") ? "wechat" : ""}"><div class="mini-card-head"><span>${escapeHtml(name)}</span><span class="tag ${agent.integrations.includes(name) ? "green" : ""}">${agent.integrations.includes(name) ? "已接入" : "未接入"}</span></div><div class="subtle">快速集成智能助手到${escapeHtml(name)}</div></div>`
+          (name) => `<div class="mini-card" ${name.includes("企业微信") ? `data-page="wechat"` : `data-demo-action="配置集成：${escapeHtml(name)}"`}><div class="mini-card-head"><span>${escapeHtml(name)}</span><span class="tag ${agent.integrations.includes(name) ? "green" : ""}">${agent.integrations.includes(name) ? "已接入" : "未接入"}</span></div><div class="subtle">快速集成智能助手到${escapeHtml(name)}</div></div>`
         )
         .join("")}
     </div>`;
