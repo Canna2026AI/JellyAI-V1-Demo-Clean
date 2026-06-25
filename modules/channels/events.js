@@ -1,6 +1,8 @@
 // Channels page events.
 
 function bindChannelEvents() {
+  ensureChannelBackendLoaded();
+
   document.querySelectorAll("[data-channel-category]").forEach((el) =>
     el.addEventListener("click", () => setState({ channelCategory: el.dataset.channelCategory, channelActiveId: null, channelModalMode: "detail" }))
   );
@@ -18,12 +20,7 @@ function bindChannelEvents() {
   const channelRefresh = document.querySelector("[data-channel-refresh]");
   if (channelRefresh) channelRefresh.addEventListener("click", () => {
     if (state.channelLoading) return;
-    setState({ channelLoading: true, channelActiveId: null });
-    window.setTimeout(() => {
-      state.channelLoading = false;
-      render();
-      showToast("渠道列表已刷新");
-    }, 450);
+    refreshChannelsFromBackend({ toast: true });
   });
 
   document.querySelectorAll("[data-channel-detail]").forEach((el) =>
@@ -69,16 +66,44 @@ function bindChannelEvents() {
   );
 
   document.querySelectorAll("[data-channel-save]").forEach((el) =>
-    el.addEventListener("click", () => saveChannelMockConfig(el.dataset.channelSave))
+    el.addEventListener("click", () => saveChannelConfig(el.dataset.channelSave))
   );
 
   document.querySelectorAll("[data-channel-test]").forEach((el) =>
-    el.addEventListener("click", () => testChannelMockConfig(el.dataset.channelTest))
+    el.addEventListener("click", () => testChannelConfig(el.dataset.channelTest))
   );
 
   document.querySelectorAll("[data-channel-remove]").forEach((el) =>
-    el.addEventListener("click", () => removeChannelMockConfig(el.dataset.channelRemove))
+    el.addEventListener("click", () => removeChannelAccount(el.dataset.channelRemove, el.dataset.channelAccountId))
   );
+}
+
+function ensureChannelBackendLoaded() {
+  if (state.channelBackendRequested) return;
+  state.channelBackendRequested = true;
+  refreshChannelsFromBackend({ toast: false, initial: true });
+}
+
+async function refreshChannelsFromBackend(options = {}) {
+  if (!window.channelsService) return false;
+  state.channelLoading = true;
+  state.channelActiveId = null;
+  render();
+  try {
+    const nextChannels = await channelsService.listChannels();
+    replaceChannels(nextChannels);
+    state.channelBackendAvailable = true;
+    state.channelLoading = false;
+    render();
+    if (options.toast) showToast("渠道列表已从后端刷新");
+    return true;
+  } catch (error) {
+    state.channelBackendAvailable = false;
+    state.channelLoading = false;
+    render();
+    if (options.toast) showToast("后端暂不可用，已保留静态渠道数据");
+    return false;
+  }
 }
 
 function openChannelDetail(channelId) {
@@ -97,7 +122,7 @@ function handleChannelPrimary(channelId) {
   setState({ channelActiveId: channelId, channelModalMode: channel.status === "已接入" ? "detail" : "connect" });
 }
 
-function saveChannelMockConfig(channelId) {
+async function saveChannelConfig(channelId) {
   const channel = findChannelById(channelId);
   const form = document.querySelector("[data-channel-form]");
   if (!channel || !form) return;
@@ -107,20 +132,32 @@ function saveChannelMockConfig(channelId) {
     showToast("请输入账号名称");
     return;
   }
+  const payload = {
+    accountName,
+    owner: String(data.get("owner") || "").trim(),
+    assistant: String(data.get("assistant") || ""),
+    remark: String(data.get("remark") || "").trim(),
+  };
+  if (state.channelBackendAvailable && window.channelsService) {
+    try {
+      await channelsService.connectChannel(channelId, payload);
+      await refreshChannelsFromBackend();
+      setState({ channelActiveId: null, channelModalMode: "detail" });
+      showToast(`${channel.name}配置已保存`);
+    } catch (error) {
+      showToast(error.message || "配置保存失败");
+    }
+    return;
+  }
   state.channelMockForms = {
     ...(state.channelMockForms || {}),
-    [channelId]: {
-      accountName,
-      owner: String(data.get("owner") || "").trim(),
-      assistant: String(data.get("assistant") || ""),
-      remark: String(data.get("remark") || "").trim(),
-    },
+    [channelId]: payload,
   };
   setState({ channelActiveId: null, channelModalMode: "detail" });
-  showToast(`${channel.name}配置已保存（Mock）`);
+  showToast(`${channel.name}配置已保存（静态模式）`);
 }
 
-function testChannelMockConfig(channelId) {
+async function testChannelConfig(channelId) {
   const channel = findChannelById(channelId);
   const form = document.querySelector("[data-channel-form]");
   if (!channel || !form) return;
@@ -130,13 +167,39 @@ function testChannelMockConfig(channelId) {
     showToast("请先填写账号名称");
     return;
   }
-  showToast(`${channel.name}连接测试通过（Mock）`);
+  const payload = {
+    accountName,
+    owner: String(data.get("owner") || "").trim(),
+    assistant: String(data.get("assistant") || ""),
+    remark: String(data.get("remark") || "").trim(),
+  };
+  if (state.channelBackendAvailable && window.channelsService) {
+    try {
+      const result = await channelsService.testChannel(channelId, payload);
+      showToast(result.message || `${channel.name}连接测试通过`);
+    } catch (error) {
+      showToast(error.message || "连接测试失败");
+    }
+    return;
+  }
+  showToast(`${channel.name}连接测试通过（静态模式）`);
 }
 
-function removeChannelMockConfig(channelId) {
+async function removeChannelAccount(channelId, accountId) {
   const channel = findChannelById(channelId);
+  if (state.channelBackendAvailable && window.channelsService && accountId) {
+    try {
+      await channelsService.deleteAccount(channelId, accountId);
+      await refreshChannelsFromBackend();
+      setState({ channelActiveId: channelId, channelModalMode: "detail" });
+      showToast(`${channel?.name || "渠道"}账号已移除`);
+    } catch (error) {
+      showToast(error.message || "账号移除失败");
+    }
+    return;
+  }
   if (!state.channelMockForms?.[channelId]) return;
   delete state.channelMockForms[channelId];
   setState({ channelActiveId: channelId, channelModalMode: "detail" });
-  showToast(`${channel?.name || "渠道"}Mock账号已移除`);
+  showToast(`${channel?.name || "渠道"}账号已移除`);
 }

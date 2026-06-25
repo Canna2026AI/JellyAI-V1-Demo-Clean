@@ -1,4 +1,4 @@
-// Channel detail and mock connection modal renderers.
+// Channel detail and connection modal renderers.
 
 function renderChannelModal() {
   const view = getChannelViewState();
@@ -24,6 +24,7 @@ function renderChannelModal() {
 }
 
 function renderChannelDetail(channel) {
+  const accountRows = getChannelAccountRows(channel);
   return `<div class="channel-detail">
     <div class="channel-detail-summary">
       ${iconBox(channel.icon, `channel-icon ${getChannelIconClass(channel.category, channel.status)}`)}
@@ -52,7 +53,7 @@ function renderChannelDetail(channel) {
     </div>
     <div class="channel-detail-section">
       <h3>已连接账号</h3>
-      ${channel.accounts.length ? `<ul class="channel-account-list">${channel.accounts.map((account) => `<li><span>${escapeHtml(account)}</span>${account === channel.mockAccountName ? `<button class="link-button" type="button" data-channel-remove="${escapeHtml(channel.id)}">移除</button>` : ""}</li>`).join("")}</ul>` : `<p class="subtle">当前暂无已连接账号。</p>`}
+      ${accountRows.length ? `<ul class="channel-account-list">${accountRows.map((account) => `<li><span>${escapeHtml(account.label)}</span>${account.removable ? `<button class="link-button" type="button" data-channel-remove="${escapeHtml(channel.id)}" data-channel-account-id="${escapeHtml(account.id)}">移除</button>` : ""}</li>`).join("")}</ul>` : `<p class="subtle">当前暂无已连接账号。</p>`}
     </div>
   </div>`;
 }
@@ -62,7 +63,7 @@ function renderChannelConnectForm(channel) {
   return `<form class="channel-connect-form" data-channel-form="${escapeHtml(channel.id)}">
     <div class="channel-form-intro">
       <b>${escapeHtml(channel.name)}</b>
-      <span>这是本地 mock 接入表单，只保存到当前 Demo 状态，不连接真实第三方平台。</span>
+      <span>配置会保存到当前后端服务；真实第三方授权需在后端补充对应平台凭据。</span>
     </div>
     <label>
       <span>账号名称</span>
@@ -84,7 +85,7 @@ function renderChannelConnectForm(channel) {
     </label>
     <div class="channel-test-row">
       <button class="button small" type="button" data-channel-test="${escapeHtml(channel.id)}">测试连接</button>
-      <span>仅模拟校验账号名称和配置完整度</span>
+      <span>通过后端校验账号名称、开放状态和配置完整度</span>
     </div>
     <div class="channel-required-fields">
       <span>后续真实接入字段</span>

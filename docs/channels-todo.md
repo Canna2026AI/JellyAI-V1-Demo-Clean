@@ -1,6 +1,13 @@
 # 对话渠道后端 TODO
 
-当前对话渠道模块只使用前端 mock 数据和本地 Demo 状态，不连接真实第三方平台。真实交付时需要建设统一的渠道接入服务，把第三方授权、消息回调、账号配置和聚合对话写入后端。
+当前对话渠道模块已经具备本地可运行后端：
+
+- `server/index.js`：Node HTTP 服务，托管静态页面并提供 `/api/channels`。
+- `server/channelStore.js`：JSON 持久化数据库、账号 CRUD、连接测试、Webhook 收件箱、审计日志。
+- `server/seed/channels-db.json`：首次启动 seed 数据。
+- `services/channelsService.js`：前端对话渠道 API client。
+
+本地后端能真实保存、读取、删除渠道账号，并能接收 webhook 事件。它不假接真实第三方平台；生产交付时仍需要补充第三方授权、真实消息 SDK、租户登录和正式数据库。
 
 ## API
 
@@ -31,6 +38,8 @@
   - 校验配置字段完整度、第三方凭据有效性、webhook 可达性。
   - 返回 `passed`、`checks[]`、`warnings[]`、`nextAction`。
 
+当前本地后端已实现基础连接测试；生产环境需要接入第三方 SDK 的凭据校验。
+
 ### Webhook
 
 - `POST /api/webhooks/channels/:provider`
@@ -38,6 +47,10 @@
   - Provider：`wecom`、`wechat_mp`、`xiaohongshu`、`douyin`、`telegram`、`whatsapp`。
 - `GET /api/webhooks/channels/:provider/verify`
   - 用于微信、Meta 等平台的 webhook 校验。
+- `GET /api/webhooks/channels/:provider`
+  - 查看本地已接收 webhook 事件。
+
+当前本地后端已实现 webhook 收件箱和幂等事件 ID；生产环境需要补充每个平台的签名规则和消息归一化。
 
 ## 数据库
 
@@ -53,6 +66,8 @@
 - `required_fields`
 - `created_at`
 - `updated_at`
+
+当前本地版本以 `.data/channels-db.json` 保存上述概念数据；生产环境建议迁移到 PostgreSQL 或 MySQL。
 
 ### `channel_accounts`
 

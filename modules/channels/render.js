@@ -12,7 +12,7 @@ function renderChannels() {
           <h1 class="page-title">对话渠道</h1>
           <div class="subtle">管理您的对话渠道并发现新对话渠道以帮助您获得更多客户。</div>
         </div>
-        <button class="button small" type="button" data-channel-refresh title="重新读取本地 mock 渠道数据" ${view.loading ? "disabled" : ""}>${view.loading ? "刷新中..." : "刷新"}</button>
+        <button class="button small" type="button" data-channel-refresh title="重新读取后端渠道数据" ${view.loading ? "disabled" : ""}>${view.loading ? "刷新中..." : "刷新"}</button>
       </div>
       <div class="channel-library-body">
         <div class="channel-category-strip">
@@ -51,7 +51,7 @@ function renderChannelLoading() {
     <div>
       <div class="empty-icon">◌</div>
       <div>正在加载渠道</div>
-      <div class="subtle" style="margin-top:8px">正在读取本地 mock 渠道配置</div>
+      <div class="subtle" style="margin-top:8px">正在读取后端渠道配置</div>
     </div>
   </div>`;
 }

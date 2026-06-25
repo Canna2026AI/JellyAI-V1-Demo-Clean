@@ -2,14 +2,14 @@
 
 这是 JellyAI V1 Demo 的干净静态前端源码版本。
 
-本项目用于产品演示、前端交互确认、后续正式前端开发前的协作基线。当前版本不接后端，不使用 React，不使用 Next.js，所有数据均为本地 mock 数据和浏览器内状态。
+本项目用于产品演示、前端交互确认、后续正式前端开发前的协作基线。当前版本不使用 React，不使用 Next.js。对话渠道模块已接入本地 Node 后端，支持真实 API、持久化 JSON 数据库、鉴权、Webhook 收件箱和静态页面托管；其他模块仍为前端 Demo 数据。
 
 ## 如何运行
 
-在本目录执行：
+推荐在本目录执行：
 
 ```bash
-python3 -m http.server 3000
+npm start
 ```
 
 然后打开：
@@ -18,7 +18,25 @@ python3 -m http.server 3000
 http://localhost:3000
 ```
 
-也可以使用任意静态服务器直接打开 `index.html`。
+对话渠道后端默认使用：
+
+```text
+http://127.0.0.1:3000/api/channels
+```
+
+写入类接口默认需要 Bearer Token：
+
+```text
+jelly-demo-token
+```
+
+可通过环境变量覆盖：
+
+```bash
+PORT=3000 JELLY_DEMO_API_TOKEN=your-token npm start
+```
+
+仍可使用任意静态服务器直接打开 `index.html`，但对话渠道会降级为静态演示数据，无法持久化保存。
 
 ## 项目结构
 
@@ -26,11 +44,15 @@ http://localhost:3000
 JellyAI-V1-Demo-Clean/
 ├── index.html
 ├── app.js
+├── package.json
 ├── vercel.json
 ├── assets/
 ├── core/
 ├── data/
+├── docs/
 ├── modules/
+├── server/
+├── services/
 └── styles/
 ```
 
@@ -45,6 +67,10 @@ JellyAI-V1-Demo-Clean/
 `core/`：全局能力，包括状态、路由、Toast、Modal、事件委托和通用工具边界。
 
 `data/`：mock 数据，按业务模块拆分。
+
+`server/`：本地 Node 后端。当前实现对话渠道 API、JSON 持久化、鉴权、Webhook 收件箱和静态资源托管。
+
+`services/`：前端 API client。当前包含对话渠道后端 client。
 
 `modules/`：业务模块，每个模块都有独立目录。当前核心模块包括：
 

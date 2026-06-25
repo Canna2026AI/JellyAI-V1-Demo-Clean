@@ -1,0 +1,13 @@
+{
+  "name": "jellyai-v1-demo-clean",
+  "version": "1.0.0",
+  "private": true,
+  "description": "JellyAI V1 demo with a local usable channels backend.",
+  "scripts": {
+    "start": "node server/index.js",
+    "check": "find . -name '*.js' -type f -not -path './.data/*' -print0 | sort -z | xargs -0 -n 1 node --check"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

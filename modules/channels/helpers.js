@@ -16,7 +16,7 @@ function getChannelsWithMockState() {
 
 function applyChannelMockState(channel) {
   const saved = getChannelMockConfig(channel.id);
-  if (!saved) return channel;
+  if (!saved || state.channelBackendAvailable) return channel;
   const savedAccount = formatChannelMockAccount(saved);
   return {
     ...channel,
@@ -66,6 +66,10 @@ function getChannelSearchText(channel) {
   ].join(" ").toLowerCase();
 }
 
+function replaceChannels(nextChannels) {
+  channels.splice(0, channels.length, ...nextChannels);
+}
+
 function channelMatchesCategory(channel, category) {
   if (category === "全部") return true;
   if (category === "已绑定") return channel.status === "已接入";
@@ -90,6 +94,27 @@ function getChannelFormValues(channel) {
     assistant: saved.assistant || "物流客服助手",
     remark: saved.remark || "",
   };
+}
+
+function getChannelAccountRows(channel) {
+  if (Array.isArray(channel.accountRecords) && channel.accountRecords.length) {
+    return channel.accountRecords.map((account) => ({
+      id: account.id,
+      label: formatChannelAccountRecord(account),
+      removable: true,
+    }));
+  }
+  return (channel.accounts || []).map((account) => ({
+    id: "",
+    label: account,
+    removable: account === channel.mockAccountName,
+  }));
+}
+
+function formatChannelAccountRecord(account) {
+  const owner = account.owner ? ` / ${account.owner}` : "";
+  const status = account.status ? ` · ${account.status}` : "";
+  return `${account.accountName}${owner}${status}`;
 }
 
 function getChannelActionLabel(channel) {
