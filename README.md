@@ -26,6 +26,22 @@ http://localhost:3000
 
 如果只需要查看静态页面，也可以使用任意静态服务器直接打开 `index.html`。此时聚合对话会自动降级为浏览器 localStorage 数据。
 
+内置后端会自动使用 Demo 账号登录：
+
+```text
+用户名：kelvin
+密码：demo123
+角色：管理员
+```
+
+也可以手动调用：
+
+```bash
+curl -i -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"kelvin","password":"demo123"}'
+```
+
 ## 项目结构
 
 ```text
@@ -124,3 +140,10 @@ npm run test:api
 ```
 
 该脚本会自动启动一个临时后端，覆盖会话分页、消息发送幂等、消息分页、客户资料更新、状态、标签、托管、收藏、审计日志、快捷回复、工作时间和 webhook 入站消息。
+
+当前还覆盖：
+
+- 未登录请求被拒绝。
+- 只读用户无法发送消息。
+- 登录用户写入审计操作人。
+- SSE 实时事件会推送 webhook 入站消息。

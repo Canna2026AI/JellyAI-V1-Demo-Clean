@@ -16,6 +16,10 @@ const rootDir = __dirname;
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || "127.0.0.1";
 const maxBodyBytes = 1024 * 1024;
+const sessionCookieName = "jelly_session";
+const sessionTtlMs = 12 * 60 * 60 * 1000;
+const webhookSecret = process.env.JELLY_WEBHOOK_SECRET || "";
+const sseClients = new Set();
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -61,45 +65,71 @@ async function handleApi(req, res, requestUrl) {
     return;
   }
 
+  if (pathname.startsWith("/api/auth")) {
+    await handleAuth(req, res, pathname);
+    return;
+  }
+
+  if (pathname.startsWith("/api/conversations/webhooks/")) {
+    await handleConversationWebhook(req, res, pathname);
+    return;
+  }
+
+  req.auth = authenticateRequest(req);
+
+  if (pathname === "/api/conversations/events" && req.method === "GET") {
+    requirePermission(req, "conversations:read");
+    handleConversationEvents(req, res);
+    return;
+  }
+
   if (pathname === "/api/conversations/state" && req.method === "GET") {
-    sendJson(res, 200, toClientState(readStore()));
+    requirePermission(req, "conversations:read");
+    sendJson(res, 200, toClientState(readStore(), req.auth));
     return;
   }
 
   if (pathname === "/api/conversations/meta" && req.method === "GET") {
+    requirePermission(req, "conversations:read");
     const store = readStore();
-    sendJson(res, 200, buildConversationMeta(store));
+    sendJson(res, 200, buildConversationMeta(store, req.auth));
     return;
   }
 
   if (pathname === "/api/conversations/audit-logs" && req.method === "GET") {
+    requirePermission(req, "audit:read");
     handleAuditLogs(req, res, requestUrl);
     return;
   }
 
   if (pathname === "/api/conversations" && req.method === "GET") {
+    requirePermission(req, "conversations:read");
     const store = readStore();
-    const filteredItems = filterConversations(store.conversations, requestUrl.searchParams);
+    const tenantConversations = conversationsForAuth(store.conversations, req.auth);
+    const filteredItems = filterConversations(tenantConversations, requestUrl.searchParams);
     const page = paginate(filteredItems, requestUrl.searchParams);
     sendJson(res, 200, {
       items: page.items,
-      total: store.conversations.length,
+      total: tenantConversations.length,
       filteredTotal: filteredItems.length,
       page: page.meta,
       customViews: store.customViews,
-      meta: buildConversationMeta(store),
+      meta: buildConversationMeta(store, req.auth),
     });
     return;
   }
 
   if (pathname === "/api/conversations" && req.method === "PUT") {
+    requirePermission(req, "conversations:admin");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
       const conversations = Array.isArray(body) ? body : body.conversations;
       if (!Array.isArray(conversations)) throw createHttpError(400, "conversations 必须是数组");
-      store.conversations = conversations;
+      store.conversations = conversations.map((conversation) => ({ ...conversation, tenantId: req.auth.user.tenantId }));
+      addAudit(store, null, "conversation.bulk_save", { count: conversations.length }, req.auth);
       return store.conversations;
     });
+    publishConversationEvent({ type: "conversation.bulk_saved", actor: publicUser(req.auth.user) });
     sendJson(res, 200, { conversations: result });
     return;
   }
@@ -124,11 +154,6 @@ async function handleApi(req, res, requestUrl) {
     return;
   }
 
-  if (pathname.startsWith("/api/conversations/webhooks/")) {
-    await handleConversationWebhook(req, res, pathname);
-    return;
-  }
-
   const match = pathname.match(/^\/api\/conversations\/([^/]+)(?:\/([^/]+))?$/);
   if (match) {
     await handleConversationResource(req, res, requestUrl, decodeURIComponent(match[1]), match[2]);
@@ -138,43 +163,96 @@ async function handleApi(req, res, requestUrl) {
   sendJson(res, 404, { error: "not_found", message: "接口不存在" });
 }
 
+async function handleAuth(req, res, pathname) {
+  if (pathname === "/api/auth/login" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const username = String(body.username || "kelvin").trim();
+    const password = String(body.password || "demo123");
+    const { result } = withStore((store) => {
+      const user = store.users.find((item) => item.username === username && item.password === password);
+      if (!user) throw createHttpError(401, "账号或密码错误");
+      const session = {
+        id: createId("session"),
+        userId: user.id,
+        tenantId: user.tenantId,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + sessionTtlMs).toISOString(),
+      };
+      store.sessions = [...(store.sessions || []).filter((item) => item.userId !== user.id), session];
+      return { user: publicUser(user), session };
+    });
+    sendJson(res, 200, { user: result.user }, {
+      "Set-Cookie": serializeCookie(sessionCookieName, result.session.id, { maxAge: Math.floor(sessionTtlMs / 1000) }),
+    });
+    return;
+  }
+
+  if (pathname === "/api/auth/me" && req.method === "GET") {
+    const auth = authenticateRequest(req);
+    sendJson(res, 200, { user: publicUser(auth.user), permissions: Array.from(auth.permissions) });
+    return;
+  }
+
+  if (pathname === "/api/auth/logout" && req.method === "POST") {
+    const sessionId = readSessionId(req);
+    if (sessionId) {
+      withStore((store) => {
+        store.sessions = (store.sessions || []).filter((session) => session.id !== sessionId);
+        return null;
+      });
+    }
+    sendJson(res, 200, { ok: true }, {
+      "Set-Cookie": serializeCookie(sessionCookieName, "", { maxAge: 0 }),
+    });
+    return;
+  }
+
+  sendJson(res, 404, { error: "not_found", message: "认证接口不存在" });
+}
+
 async function handleConversationResource(req, res, requestUrl, conversationId, action) {
   if (!action && req.method === "GET") {
+    requirePermission(req, "conversations:read");
     const store = readStore();
-    const conversation = findConversation(store, conversationId);
+    const conversation = findConversation(store, conversationId, req.auth);
     if (!conversation) return sendJson(res, 404, { error: "not_found", message: "会话不存在" });
     sendJson(res, 200, { conversation });
     return;
   }
 
   if (!action && req.method === "PATCH") {
+    requirePermission(req, "conversations:update");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
-      const conversation = requireConversation(store, conversationId);
+      const conversation = requireConversation(store, conversationId, req.auth);
       Object.assign(conversation, pickConversationPatch(body));
       touchConversation(conversation);
-      addAudit(store, conversationId, "conversation.patch", body);
+      addAudit(store, conversationId, "conversation.patch", body, req.auth);
       return conversation;
     });
+    publishConversationEvent({ type: "conversation.updated", conversationId, actor: publicUser(req.auth.user), conversation: result });
     sendJson(res, 200, { conversation: result });
     return;
   }
 
   if (action === "read" && req.method === "PATCH") {
+    requirePermission(req, "conversations:read");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
-      const conversation = requireConversation(store, conversationId);
+      const conversation = requireConversation(store, conversationId, req.auth);
       conversation.unread = body.unread === undefined ? false : Boolean(body.unread);
-      addAudit(store, conversationId, "conversation.read", { unread: conversation.unread });
+      addAudit(store, conversationId, "conversation.read", { unread: conversation.unread }, req.auth);
       return conversation;
     });
+    publishConversationEvent({ type: "conversation.updated", conversationId, actor: publicUser(req.auth.user), conversation: result });
     sendJson(res, 200, { conversation: result });
     return;
   }
 
   if (action === "messages" && req.method === "GET") {
+    requirePermission(req, "conversations:read");
     const store = readStore();
-    const conversation = findConversation(store, conversationId);
+    const conversation = findConversation(store, conversationId, req.auth);
     if (!conversation) return sendJson(res, 404, { error: "not_found", message: "会话不存在" });
     const page = paginate(conversation.messages || [], requestUrl.searchParams);
     sendJson(res, 200, { items: page.items, total: (conversation.messages || []).length, page: page.meta });
@@ -182,41 +260,47 @@ async function handleConversationResource(req, res, requestUrl, conversationId, 
   }
 
   if (action === "messages" && req.method === "POST") {
+    requirePermission(req, "conversations:message");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
-      const conversation = requireConversation(store, conversationId);
+      const conversation = requireConversation(store, conversationId, req.auth);
       const message = appendMessage(conversation, {
         id: body.clientMessageId,
         role: body.role || "me",
         type: body.type || "text",
         text: body.content || body.text,
         meta: body.meta,
+        auth: req.auth,
       });
-      addAudit(store, conversationId, "message.create", { messageId: message.id, role: message.role });
+      addAudit(store, conversationId, "message.create", { messageId: message.id, role: message.role }, req.auth);
       return { conversation, message };
     });
+    publishConversationEvent({ type: "message.created", conversationId, actor: publicUser(req.auth.user), message: result.message, conversation: result.conversation });
     sendJson(res, 201, result);
     return;
   }
 
   if (action === "status" && req.method === "PATCH") {
+    requirePermission(req, "conversations:update");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
-      const conversation = requireConversation(store, conversationId);
+      const conversation = requireConversation(store, conversationId, req.auth);
       const status = validateText(body.status, "status");
       updateStatus(conversation, status);
-      addAudit(store, conversationId, "conversation.status", { status });
+      addAudit(store, conversationId, "conversation.status", { status }, req.auth);
       return conversation;
     });
+    publishConversationEvent({ type: "conversation.updated", conversationId, actor: publicUser(req.auth.user), conversation: result });
     sendJson(res, 200, { conversation: result });
     return;
   }
 
   if (action === "assignee" && req.method === "PATCH") {
+    requirePermission(req, "conversations:assign");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
-      const conversation = requireConversation(store, conversationId);
-      const assignee = validateText(body.assignee || currentAgentName, "assignee");
+      const conversation = requireConversation(store, conversationId, req.auth);
+      const assignee = validateText(body.assignee || req.auth.user.agentName || currentAgentName, "assignee");
       conversation.assignee = assignee;
       conversation.owner = assignee;
       conversation.type = body.mode === "ai" ? "ai" : "manual";
@@ -225,17 +309,19 @@ async function handleConversationResource(req, res, requestUrl, conversationId, 
       conversation.statusColor = getStatusColor(conversation.status);
       conversation.viewTags = (conversation.viewTags || []).filter((tag) => tag !== "未人工回复");
       appendSystemMessage(conversation, `已转入人工对话，操作人：${assignee}`);
-      addAudit(store, conversationId, "conversation.assignee", { assignee, mode: conversation.type });
+      addAudit(store, conversationId, "conversation.assignee", { assignee, mode: conversation.type }, req.auth);
       return conversation;
     });
+    publishConversationEvent({ type: "conversation.updated", conversationId, actor: publicUser(req.auth.user), conversation: result });
     sendJson(res, 200, { conversation: result });
     return;
   }
 
   if (action === "tags" && req.method === "PATCH") {
+    requirePermission(req, "conversations:update");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
-      const conversation = requireConversation(store, conversationId);
+      const conversation = requireConversation(store, conversationId, req.auth);
       if (Array.isArray(body.tags)) {
         conversation.tags = uniqueStrings(body.tags).map((tag) => tag.slice(0, 12));
       } else if (body.tag) {
@@ -245,54 +331,61 @@ async function handleConversationResource(req, res, requestUrl, conversationId, 
         conversation.tags = Array.from(tags);
       }
       touchConversation(conversation);
-      addAudit(store, conversationId, "conversation.tags", { tags: conversation.tags });
+      addAudit(store, conversationId, "conversation.tags", { tags: conversation.tags }, req.auth);
       return conversation;
     });
+    publishConversationEvent({ type: "conversation.updated", conversationId, actor: publicUser(req.auth.user), conversation: result });
     sendJson(res, 200, { conversation: result });
     return;
   }
 
   if (action === "customer" && req.method === "PATCH") {
+    requirePermission(req, "conversations:update");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
-      const conversation = requireConversation(store, conversationId);
+      const conversation = requireConversation(store, conversationId, req.auth);
       conversation.customer = {
         ...(conversation.customer || {}),
         ...pickCustomerPatch(body),
       };
       touchConversation(conversation);
-      addAudit(store, conversationId, "conversation.customer", pickCustomerPatch(body));
+      addAudit(store, conversationId, "conversation.customer", pickCustomerPatch(body), req.auth);
       return conversation;
     });
+    publishConversationEvent({ type: "conversation.updated", conversationId, actor: publicUser(req.auth.user), conversation: result });
     sendJson(res, 200, { conversation: result });
     return;
   }
 
   if (action === "hosting" && req.method === "PATCH") {
+    requirePermission(req, "conversations:update");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
-      const conversation = requireConversation(store, conversationId);
+      const conversation = requireConversation(store, conversationId, req.auth);
       conversation.hosted = Boolean(body.enabled);
       appendSystemMessage(conversation, `托管状态已${conversation.hosted ? "开启" : "暂停"}`);
-      addAudit(store, conversationId, "conversation.hosting", { hosted: conversation.hosted });
+      addAudit(store, conversationId, "conversation.hosting", { hosted: conversation.hosted }, req.auth);
       return conversation;
     });
+    publishConversationEvent({ type: "conversation.updated", conversationId, actor: publicUser(req.auth.user), conversation: result });
     sendJson(res, 200, { conversation: result });
     return;
   }
 
   if (action === "star" && req.method === "PATCH") {
+    requirePermission(req, "conversations:update");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
-      const conversation = requireConversation(store, conversationId);
+      const conversation = requireConversation(store, conversationId, req.auth);
       conversation.starred = Boolean(body.starred);
       const viewTags = new Set(conversation.viewTags || []);
       conversation.starred ? viewTags.add("收藏") : viewTags.delete("收藏");
       conversation.viewTags = Array.from(viewTags);
       touchConversation(conversation);
-      addAudit(store, conversationId, "conversation.star", { starred: conversation.starred });
+      addAudit(store, conversationId, "conversation.star", { starred: conversation.starred }, req.auth);
       return conversation;
     });
+    publishConversationEvent({ type: "conversation.updated", conversationId, actor: publicUser(req.auth.user), conversation: result });
     sendJson(res, 200, { conversation: result });
     return;
   }
@@ -302,27 +395,34 @@ async function handleConversationResource(req, res, requestUrl, conversationId, 
 
 async function handleCustomViews(req, res) {
   if (req.method === "GET") {
+    requirePermission(req, "conversations:read");
     sendJson(res, 200, { customViews: readStore().customViews });
     return;
   }
 
   if (req.method === "PUT") {
+    requirePermission(req, "customViews:manage");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
       store.customViews = uniqueStrings(body.customViews || body.views || []);
+      addAudit(store, null, "custom_views.save", { count: store.customViews.length }, req.auth);
       return store.customViews;
     });
+    publishConversationEvent({ type: "customViews.updated", actor: publicUser(req.auth.user), customViews: result });
     sendJson(res, 200, { customViews: result });
     return;
   }
 
   if (req.method === "POST") {
+    requirePermission(req, "customViews:manage");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
       const name = validateText(body.name, "name").slice(0, 100);
       if (!store.customViews.includes(name)) store.customViews.push(name);
+      addAudit(store, null, "custom_views.create", { name }, req.auth);
       return store.customViews;
     });
+    publishConversationEvent({ type: "customViews.updated", actor: publicUser(req.auth.user), customViews: result });
     sendJson(res, 201, { customViews: result });
     return;
   }
@@ -339,6 +439,7 @@ function handleAuditLogs(req, res, requestUrl) {
   const conversationId = requestUrl.searchParams.get("conversationId");
   const action = requestUrl.searchParams.get("action");
   const logs = [...store.auditLogs]
+    .filter((item) => !item.tenantId || item.tenantId === req.auth.user.tenantId)
     .filter((item) => !conversationId || item.conversationId === conversationId)
     .filter((item) => !action || item.action === action)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -348,24 +449,29 @@ function handleAuditLogs(req, res, requestUrl) {
 
 async function handleQuickReplies(req, res, pathname) {
   if (pathname === "/api/conversations/quick-replies" && req.method === "GET") {
+    requirePermission(req, "conversations:read");
     sendJson(res, 200, readStore().quickMessages);
     return;
   }
 
   if (pathname === "/api/conversations/quick-replies" && req.method === "PUT") {
+    requirePermission(req, "quickReplies:manage");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
       store.quickMessages = {
         groups: Array.isArray(body.groups) ? body.groups : store.quickMessages.groups,
         replies: Array.isArray(body.replies) ? body.replies : store.quickMessages.replies,
       };
+      addAudit(store, null, "quick_replies.bulk_save", { groups: store.quickMessages.groups.length, replies: store.quickMessages.replies.length }, req.auth);
       return store.quickMessages;
     });
+    publishConversationEvent({ type: "quickReplies.updated", actor: publicUser(req.auth.user), quickMessages: result });
     sendJson(res, 200, result);
     return;
   }
 
   if (pathname === "/api/conversations/quick-replies" && req.method === "POST") {
+    requirePermission(req, "quickReplies:manage");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
       const content = validateText(body.content, "content");
@@ -376,8 +482,10 @@ async function handleQuickReplies(req, res, pathname) {
         content,
       };
       store.quickMessages.replies.push(reply);
+      addAudit(store, null, "quick_replies.create", { replyId: reply.id }, req.auth);
       return reply;
     });
+    publishConversationEvent({ type: "quickReplies.updated", actor: publicUser(req.auth.user) });
     sendJson(res, 201, { reply: result });
     return;
   }
@@ -387,6 +495,7 @@ async function handleQuickReplies(req, res, pathname) {
   const replyId = decodeURIComponent(match[1]);
 
   if (req.method === "PATCH") {
+    requirePermission(req, "quickReplies:manage");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
       const reply = store.quickMessages.replies.find((item) => item.id === replyId);
@@ -394,18 +503,23 @@ async function handleQuickReplies(req, res, pathname) {
       if (body.groupId !== undefined) reply.groupId = String(body.groupId);
       if (body.title !== undefined) reply.title = String(body.title).slice(0, 40);
       if (body.content !== undefined) reply.content = validateText(body.content, "content");
+      addAudit(store, null, "quick_replies.update", { replyId }, req.auth);
       return reply;
     });
+    publishConversationEvent({ type: "quickReplies.updated", actor: publicUser(req.auth.user) });
     sendJson(res, 200, { reply: result });
     return;
   }
 
   if (req.method === "DELETE") {
+    requirePermission(req, "quickReplies:manage");
     const { result } = withStore((store) => {
       const before = store.quickMessages.replies.length;
       store.quickMessages.replies = store.quickMessages.replies.filter((item) => item.id !== replyId);
+      if (before !== store.quickMessages.replies.length) addAudit(store, null, "quick_replies.delete", { replyId }, req.auth);
       return before !== store.quickMessages.replies.length;
     });
+    if (result) publishConversationEvent({ type: "quickReplies.updated", actor: publicUser(req.auth.user) });
     sendJson(res, result ? 200 : 404, result ? { ok: true } : { error: "not_found", message: "快捷回复不存在" });
     return;
   }
@@ -415,14 +529,17 @@ async function handleQuickReplies(req, res, pathname) {
 
 async function handleQuickReplyGroups(req, res) {
   if (req.method === "POST") {
+    requirePermission(req, "quickReplies:manage");
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
       const name = validateText(body.name, "name").slice(0, 30);
       if (store.quickMessages.groups.some((group) => group.name === name)) throw createHttpError(409, "分组已存在");
       const group = { id: body.id || createId("group"), name };
       store.quickMessages.groups.push(group);
+      addAudit(store, null, "quick_reply_groups.create", { groupId: group.id }, req.auth);
       return group;
     });
+    publishConversationEvent({ type: "quickReplies.updated", actor: publicUser(req.auth.user) });
     sendJson(res, 201, { group: result });
     return;
   }
@@ -432,6 +549,7 @@ async function handleQuickReplyGroups(req, res) {
 
 async function handleSettings(req, res, pathname) {
   if (pathname === "/api/conversations/settings" && req.method === "GET") {
+    requirePermission(req, "settings:read");
     sendJson(res, 200, readStore().settings);
     return;
   }
@@ -451,17 +569,25 @@ async function handleSettings(req, res, pathname) {
     return;
   }
 
+  requirePermission(req, "settings:manage");
   const body = await readJsonBody(req);
   const { result } = withStore((store) => {
     store.settings[key] = clone(body);
+    addAudit(store, null, `settings.${key}`, { key }, req.auth);
     return store.settings[key];
   });
+  publishConversationEvent({ type: "settings.updated", actor: publicUser(req.auth.user), key });
   sendJson(res, 200, { [key]: result });
 }
 
 async function handleConversationWebhook(req, res, pathname) {
   if (req.method !== "POST") {
     sendJson(res, 405, { error: "method_not_allowed" });
+    return;
+  }
+
+  if (!isValidWebhookRequest(req)) {
+    sendJson(res, 401, { error: "unauthorized", message: "Webhook 签名无效" });
     return;
   }
 
@@ -482,13 +608,15 @@ async function handleConversationWebhook(req, res, pathname) {
     const message = appendMessage(conversation, {
       id: body.eventId || body.messageId,
       role: "customer",
+      type: body.type || "text",
       text: body.text || body.content,
       meta: body.meta || `${provider} webhook`,
     });
     conversation.unread = true;
-    addAudit(store, conversation.id, "webhook.message", { provider, messageId: message.id });
+    addAudit(store, conversation.id, "webhook.message", { provider, messageId: message.id }, null, "webhook");
     return { conversation, message };
   });
+  publishConversationEvent({ type: "webhook.message", provider, conversationId: result.conversation.id, message: result.message, conversation: result.conversation });
   sendJson(res, 202, result);
 }
 
@@ -528,12 +656,14 @@ function paginate(items, params) {
   };
 }
 
-function buildConversationMeta(store) {
+function buildConversationMeta(store, auth) {
+  const conversations = auth ? conversationsForAuth(store.conversations, auth) : store.conversations;
   return {
-    currentAgent: currentAgentName,
+    currentAgent: auth?.user?.agentName || currentAgentName,
+    user: auth ? publicUser(auth.user) : null,
     customViews: store.customViews,
-    channels: Array.from(new Set(store.conversations.map((item) => item.channel))).sort((a, b) => a.localeCompare(b, "zh-CN")),
-    statuses: Array.from(new Set(store.conversations.map((item) => item.status))),
+    channels: Array.from(new Set(conversations.map((item) => item.channel))).sort((a, b) => a.localeCompare(b, "zh-CN")),
+    statuses: Array.from(new Set(conversations.map((item) => item.status))),
     quickReplyGroups: store.quickMessages.groups.length,
     quickReplies: store.quickMessages.replies.length,
   };
@@ -565,9 +695,10 @@ function matchesSearch(conversation, query, mode) {
   return mode === "exact" ? fields.some((value) => value === query) : fields.some((value) => value.includes(query));
 }
 
-function toClientState(store) {
+function toClientState(store, auth) {
   return {
-    conversations: store.conversations,
+    user: auth ? publicUser(auth.user) : null,
+    conversations: auth ? conversationsForAuth(store.conversations, auth) : store.conversations,
     customViews: store.customViews,
     quickMessages: store.quickMessages,
     settings: store.settings,
@@ -584,12 +715,12 @@ function pickCustomerPatch(body) {
   return Object.fromEntries(Object.entries(body || {}).filter(([key]) => allowed.includes(key)).map(([key, value]) => [key, String(value || "").trim()]));
 }
 
-function findConversation(store, id) {
-  return store.conversations.find((conversation) => conversation.id === id);
+function findConversation(store, id, auth) {
+  return store.conversations.find((conversation) => conversation.id === id && (!auth || conversation.tenantId === auth.user.tenantId));
 }
 
-function requireConversation(store, id) {
-  const conversation = findConversation(store, id);
+function requireConversation(store, id, auth) {
+  const conversation = findConversation(store, id, auth);
   if (!conversation) throw createHttpError(404, "会话不存在");
   return conversation;
 }
@@ -615,8 +746,8 @@ function appendMessage(conversation, input) {
     conversation.status = "解决中";
     conversation.statusColor = "orange";
     conversation.type = "manual";
-    conversation.assignee = currentAgentName;
-    conversation.owner = currentAgentName;
+    conversation.assignee = input.auth?.user?.agentName || currentAgentName;
+    conversation.owner = input.auth?.user?.agentName || currentAgentName;
     conversation.assignedToMe = true;
     conversation.unread = false;
     conversation.viewTags = (conversation.viewTags || []).filter((tag) => tag !== "未人工回复");
@@ -661,6 +792,7 @@ function createConversationFromWebhook(provider, body) {
   const channelName = body.channel || providerChannel(provider);
   return {
     id,
+    tenantId: body.tenantId || "tenant-demo",
     name: body.customerName || body.name || "新访客",
     avatar: String(body.customerName || provider || "客").slice(0, 1).toUpperCase(),
     owner: "AI",
@@ -702,16 +834,128 @@ function providerChannel(provider) {
   }[provider] || provider;
 }
 
-function addAudit(store, conversationId, action, payload) {
+function addAudit(store, conversationId, action, payload, auth, operatorOverride) {
   store.auditLogs.push({
     id: createId("audit"),
     conversationId,
     action,
     payload,
-    operator: currentAgentName,
+    operator: operatorOverride || auth?.user?.name || currentAgentName,
+    operatorId: auth?.user?.id || null,
+    tenantId: auth?.user?.tenantId || "tenant-demo",
     createdAt: new Date().toISOString(),
   });
   if (store.auditLogs.length > 500) store.auditLogs = store.auditLogs.slice(-500);
+}
+
+function authenticateRequest(req) {
+  const sessionId = readSessionId(req);
+  if (!sessionId) throw createHttpError(401, "请先登录");
+  const store = readStore();
+  const session = (store.sessions || []).find((item) => item.id === sessionId && new Date(item.expiresAt).getTime() > Date.now());
+  if (!session) throw createHttpError(401, "登录已过期");
+  const user = store.users.find((item) => item.id === session.userId);
+  if (!user) throw createHttpError(401, "用户不存在");
+  return {
+    session,
+    user,
+    permissions: resolvePermissions(user, store),
+  };
+}
+
+function requirePermission(req, permission) {
+  if (!req.auth) throw createHttpError(401, "请先登录");
+  if (!hasPermission(req.auth.permissions, permission)) throw createHttpError(403, "没有操作权限");
+}
+
+function resolvePermissions(user, store) {
+  const permissions = new Set();
+  (user.roleIds || []).forEach((roleId) => {
+    const role = store.roles.find((item) => item.id === roleId);
+    (role?.permissions || []).forEach((permission) => permissions.add(permission));
+  });
+  return permissions;
+}
+
+function hasPermission(permissions, permission) {
+  if (permissions.has("*")) return true;
+  if (permissions.has(permission)) return true;
+  const [area] = permission.split(":");
+  return permissions.has(`${area}:*`);
+}
+
+function conversationsForAuth(conversations, auth) {
+  return conversations.filter((conversation) => conversation.tenantId === auth.user.tenantId);
+}
+
+function publicUser(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    tenantId: user.tenantId,
+    roleIds: user.roleIds,
+    agentName: user.agentName,
+  };
+}
+
+function readSessionId(req) {
+  return req.headers["x-jelly-session"] || parseCookies(req.headers.cookie || "")[sessionCookieName] || "";
+}
+
+function parseCookies(cookieHeader) {
+  return cookieHeader.split(";").reduce((acc, pair) => {
+    const [rawKey, ...rawValue] = pair.trim().split("=");
+    if (!rawKey) return acc;
+    acc[rawKey] = decodeURIComponent(rawValue.join("=") || "");
+    return acc;
+  }, {});
+}
+
+function serializeCookie(name, value, options = {}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`, "Path=/", "HttpOnly", "SameSite=Lax"];
+  if (options.maxAge !== undefined) parts.push(`Max-Age=${options.maxAge}`);
+  return parts.join("; ");
+}
+
+function handleConversationEvents(req, res) {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  const client = {
+    id: createId("sse"),
+    tenantId: req.auth.user.tenantId,
+    userId: req.auth.user.id,
+    res,
+  };
+  sseClients.add(client);
+  sendSse(client, { type: "connected", user: publicUser(req.auth.user) });
+  req.on("close", () => sseClients.delete(client));
+}
+
+function publishConversationEvent(event) {
+  const payload = {
+    ...event,
+    createdAt: new Date().toISOString(),
+  };
+  for (const client of sseClients) {
+    if (event.tenantId && client.tenantId !== event.tenantId) continue;
+    sendSse(client, payload);
+  }
+}
+
+function sendSse(client, event) {
+  client.res.write(`event: message\n`);
+  client.res.write(`data: ${JSON.stringify(event)}\n\n`);
+}
+
+function isValidWebhookRequest(req) {
+  if (!webhookSecret) return true;
+  return req.headers["x-jelly-webhook-secret"] === webhookSecret;
 }
 
 async function readJsonBody(req) {
@@ -758,7 +1002,7 @@ async function serveStatic(req, res, requestUrl) {
   fs.createReadStream(filePath).pipe(res);
 }
 
-function sendJson(res, status, payload) {
+function sendJson(res, status, payload, extraHeaders = {}) {
   const body = JSON.stringify(payload);
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
@@ -766,6 +1010,7 @@ function sendJson(res, status, payload) {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,POST,PATCH,PUT,DELETE,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    ...extraHeaders,
   });
   res.end(body);
 }

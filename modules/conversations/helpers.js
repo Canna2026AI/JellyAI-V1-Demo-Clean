@@ -350,12 +350,15 @@ const conversationData = loadConversationData();
 const workHoursSettings = loadWorkHoursSettings();
 const automationSettings = loadAutomationSettings();
 const forwardSettings = loadForwardSettings();
+let conversationBackendRefreshTimer = null;
+let conversationBackendSubscribed = false;
 
 async function initConversationBackendState() {
   if (!window.conversationService) return false;
   const backendState = await window.conversationService.loadState();
   if (!backendState) return false;
   applyConversationBackendState(backendState);
+  subscribeConversationBackendEvents();
   return true;
 }
 
@@ -388,6 +391,29 @@ function syncConversationBackend(syncPromise) {
   syncPromise.catch((error) => {
     console.warn("Conversation backend sync failed:", error.message);
   });
+}
+
+function subscribeConversationBackendEvents() {
+  if (conversationBackendSubscribed || !window.conversationService?.subscribe) return;
+  conversationBackendSubscribed = true;
+  window.conversationService.subscribe((event) => {
+    if (!event || event.type === "connected") return;
+    scheduleConversationBackendRefresh();
+  });
+}
+
+function scheduleConversationBackendRefresh() {
+  window.clearTimeout(conversationBackendRefreshTimer);
+  conversationBackendRefreshTimer = window.setTimeout(async () => {
+    const selectedConversation = state.selectedConversation;
+    const backendState = await window.conversationService?.loadState();
+    if (!backendState) return;
+    applyConversationBackendState(backendState);
+    if (selectedConversation && conversationData.some((conversation) => conversation.id === selectedConversation)) {
+      state.selectedConversation = selectedConversation;
+    }
+    if (typeof render === "function") render();
+  }, 250);
 }
 
 function getAllConversations() {
