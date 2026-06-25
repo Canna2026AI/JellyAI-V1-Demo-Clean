@@ -2,18 +2,18 @@
 
 function renderConversationModal() {
   if (!state.modal) return "";
-if (state.modal === "conversationConfirm") {
+  if (state.modal === "conversationConfirm") {
     return renderConversationConfirmModal();
   }
-if (state.modal === "customView") {
+  if (state.modal === "customView") {
     return renderCustomViewModal();
   }
 
-if (state.modal === "quickGroup") {
+  if (state.modal === "quickGroup") {
     return renderQuickGroupModal();
   }
 
-if (state.modal === "quickReply") {
+  if (state.modal === "quickReply") {
     return renderQuickReplyModal();
   }
 
@@ -28,9 +28,9 @@ function renderConversationConfirmModal() {
     state.conversationConfirm = null;
   };
   return `<div class="modal-backdrop"><div class="modal conversation-confirm-modal">
-    <div class="modal-head">${escapeHtml(confirm.title || "确认操作")}<button class="button ghost" data-close-modal>×</button></div>
+    <div class="modal-head">${escapeHtml(confirm.title || "确认操作")}<button class="button ghost" data-conversation-confirm-cancel>×</button></div>
     <div class="modal-body">${escapeHtml(confirm.body || "请确认是否继续。")}</div>
-    <div class="modal-foot"><button class="button" data-close-modal>取消</button><button class="button primary" data-modal-ok>${escapeHtml(confirm.okText || "确认")}</button></div>
+    <div class="modal-foot"><button class="button" data-conversation-confirm-cancel>取消</button><button class="button primary" data-modal-ok>${escapeHtml(confirm.okText || "确认")}</button></div>
   </div></div>`;
 }
 
@@ -63,7 +63,7 @@ function renderQuickReplyModal() {
           <button type="button" data-quick-format="insertOrderedList">1₂</button><i></i>
           <button type="button" data-quick-format="outdent">≡</button>
           <button type="button" data-quick-format="indent">≡</button><i></i>
-          <button type="button" title="插入链接">↗</button><button type="button" title="插入图片">▣</button><button type="button" title="插入表格">▦⌄</button><button type="button" title="插入内容">▧⌄</button><i></i>
+          <button type="button" data-demo-action="快捷回复插入链接" title="插入链接">↗</button><button type="button" data-demo-action="快捷回复插入图片" title="插入图片">▣</button><button type="button" data-demo-action="快捷回复插入表格" title="插入表格">▦⌄</button><button type="button" data-demo-action="快捷回复插入内容" title="插入内容">▧⌄</button><i></i>
           <button type="button" class="muted" data-quick-format="undo">↶</button><button type="button" class="muted" data-quick-format="redo">↷</button>
         </div>
         <div id="quickReplyContent" class="quick-reply-editor-content" contenteditable="true" data-quick-reply-required></div>
@@ -150,7 +150,7 @@ function renderCustomViewModal() {
     <div class="view-steps">
       ${stepLabel(1, "基本信息")}<b>›</b>${stepLabel(2, "访问权限")}<b>›</b>${stepLabel(3, "筛选条件")}
     </div>
-    <div class="modal-body custom-view-body">${body}<a class="learn-link">了解更多</a></div>
+    <div class="modal-body custom-view-body">${body}<a class="learn-link" data-demo-action="自定义视图说明">了解更多</a></div>
     <div class="modal-foot">
       ${step > 1 ? `<button class="button" data-custom-view-prev>上一步</button>` : `<button class="button" data-close-modal>取消</button>`}
       <button class="button primary${step === 1 && !state.customViewName.trim() ? " disabled" : ""}" data-custom-view-next ${step === 1 && !state.customViewName.trim() ? "disabled" : ""}>${step === 3 ? "确认" : "下一步"}</button>

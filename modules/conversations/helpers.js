@@ -22,6 +22,8 @@ const customViewStorageKey = "jelly-ai-custom-conversation-views";
 const quickMessageStorageKey = "jelly-ai-quick-messages";
 const conversationStorageKey = "jelly-ai-conversations";
 const workHoursStorageKey = "jelly-ai-conversation-work-hours";
+const automationSettingsStorageKey = "jelly-ai-conversation-automation-settings";
+const forwardSettingsStorageKey = "jelly-ai-conversation-forward-settings";
 
 const currentAgentName = "Kelvin";
 
@@ -201,6 +203,56 @@ const defaultWorkHours = {
   afterHoursText: "抱歉，现在为非工作时间，请您在我们的工作时间再次联系，谢谢",
 };
 
+const defaultAutomationSettings = {
+  followUp: {
+    enabled: true,
+    minutes: 10,
+    group: "全部对话",
+    content: "您好，刚才的问题我还在这里，您可以继续补充信息。",
+    stopOnReply: false,
+    historyCount: 2,
+  },
+  closingReply: {
+    enabled: false,
+    workDelay: 10,
+    offHoursDelay: 0,
+    timeoutFlag: "显示“超时”标识",
+    stopOnReply: false,
+    historyCount: 2,
+  },
+  media: {
+    enabled: true,
+    image: true,
+    video: true,
+    file: true,
+    audio: true,
+    stopOnReply: false,
+    historyCount: 2,
+  },
+  split: {
+    enabled: false,
+    maxChars: 300,
+    maxMessages: 3,
+    stopOnReply: false,
+    historyCount: 2,
+  },
+  summary: {
+    enabled: false,
+    group: "请选择",
+    minMessages: 4,
+    prompt: "请总结客户诉求、报价信息、待跟进事项和下一步建议。",
+    stopOnReply: false,
+    historyCount: 2,
+  },
+};
+
+const defaultForwardSettings = {
+  enabled: false,
+  channel: "企业微信群机器人",
+  scope: "全部消息",
+  webhook: "",
+};
+
 function loadCustomConversationViews() {
   const savedViews = readJsonStorage(customViewStorageKey, []);
   return Array.isArray(savedViews)
@@ -255,10 +307,43 @@ function saveWorkHoursSettings() {
   writeJsonStorage(workHoursStorageKey, workHoursSettings);
 }
 
+function loadAutomationSettings() {
+  const saved = readJsonStorage(automationSettingsStorageKey, null);
+  return mergePlainObject(defaultAutomationSettings, saved || {});
+}
+
+function saveAutomationSettings() {
+  writeJsonStorage(automationSettingsStorageKey, automationSettings);
+}
+
+function loadForwardSettings() {
+  const saved = readJsonStorage(forwardSettingsStorageKey, null);
+  return mergePlainObject(defaultForwardSettings, saved || {});
+}
+
+function saveForwardSettings() {
+  writeJsonStorage(forwardSettingsStorageKey, forwardSettings);
+}
+
+function mergePlainObject(base, patch) {
+  if (!patch || typeof patch !== "object") return structuredClone(base);
+  const next = Array.isArray(base) ? [...base] : { ...base };
+  Object.entries(patch).forEach(([key, value]) => {
+    if (value && typeof value === "object" && !Array.isArray(value) && base[key] && typeof base[key] === "object" && !Array.isArray(base[key])) {
+      next[key] = mergePlainObject(base[key], value);
+      return;
+    }
+    next[key] = value;
+  });
+  return next;
+}
+
 const customConversationViews = loadCustomConversationViews();
 const quickMessageData = loadQuickMessageData();
 const conversationData = loadConversationData();
 const workHoursSettings = loadWorkHoursSettings();
+const automationSettings = loadAutomationSettings();
+const forwardSettings = loadForwardSettings();
 
 function getAllConversations() {
   return conversationData;
@@ -392,6 +477,14 @@ function updateConversationStatus(conversationId, status) {
   saveConversationData();
 }
 
+function toggleConversationResolved(conversationId) {
+  const conversation = conversationData.find((item) => item.id === conversationId);
+  if (!conversation) return null;
+  const nextStatus = conversation.status === "已解决" ? "解决中" : "已解决";
+  updateConversationStatus(conversationId, nextStatus);
+  return nextStatus;
+}
+
 function transferConversationToHuman(conversationId) {
   const conversation = conversationData.find((item) => item.id === conversationId);
   if (!conversation) return;
@@ -439,4 +532,10 @@ function openConversationConfirm(title, body, okText, action) {
   window.__conversationConfirmAction = action;
   state.conversationConfirm = { title, body, okText };
   setState({ modal: "conversationConfirm" });
+}
+
+function closeConversationConfirm() {
+  window.__conversationConfirmAction = null;
+  state.conversationConfirm = null;
+  setState({ modal: null });
 }
