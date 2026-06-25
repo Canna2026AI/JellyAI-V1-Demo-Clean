@@ -1,12 +1,202 @@
 // Mock knowledge base data.
 
+const knowledgeSupportedSources = [
+  { id: "text", label: "文本", icon: "文", description: "手动录入 FAQ、报价规则、售后说明等文本内容" },
+  { id: "website", label: "网站", icon: "网", description: "采集网站页面并清洗为可检索知识" },
+  { id: "pdf", label: "PDF", icon: "P", description: "上传 PDF 文件并解析正文、表格和页码" },
+  { id: "word", label: "Word", icon: "W", description: "上传 DOC / DOCX 文档并按段落切分" },
+  { id: "excel", label: "Excel", icon: "X", description: "上传 XLS / XLSX 表格并支持逐行向量" },
+  { id: "txt", label: "TXT", icon: "T", description: "上传纯文本文件并自动清洗空行" },
+  { id: "csv", label: "CSV", icon: "C", description: "上传 CSV 表格并按行生成问答或知识片段" },
+];
+
+const knowledgeStatusOptions = ["全部状态", "启用", "停用", "索引中", "失败"];
+
+const knowledgeSortOptions = [
+  { id: "updatedDesc", label: "最近更新" },
+  { id: "updatedAsc", label: "最早更新" },
+  { id: "nameAsc", label: "名称 A-Z" },
+  { id: "dataDesc", label: "数据量最多" },
+];
+
 const knowledgeBases = [
   {
-    id: "logistics",
+    id: "kb-logistics",
     name: "物流问答",
-    count: "1条数据",
+    description: "欧洲海运、包税线路、报价口径和售后问题。",
     type: "多模态",
-    icon: "◎",
+    sourceType: "Excel",
+    status: "启用",
+    enabled: true,
+    documentCount: 3,
+    chunkCount: 128,
+    embeddingStatus: "已完成",
     size: "12.96KB",
+    updatedAt: "2026-06-26 02:12",
+    createdAt: "2026-06-23 11:20",
+    icon: "◎",
+    documents: [
+      {
+        id: "doc-logistics-1",
+        name: "物流问答库.xlsx",
+        type: "Excel",
+        status: "已完成",
+        size: "12.96KB",
+        updatedAt: "2026-06-26 02:12",
+        chunks: [
+          { id: "ck-001", chars: 72, embedding: "已完成", text: "问题: 什么是物流? 答案: 物流是指物品从供应地到接收地的实体流动过程，包括运输、储存、配送、信息处理。" },
+          { id: "ck-002", chars: 51, embedding: "已完成", text: "问题: 下单渠道：欧海经济BS-DD。答案: 单件计费重不足12KG按12KG计算。" },
+          { id: "ck-003", chars: 49, embedding: "已完成", text: "问题: 欧洲海运包税运行线路。答案: 深圳装柜-盐田-鹿特丹-清关-快递或卡车派送。" },
+        ],
+      },
+      {
+        id: "doc-logistics-2",
+        name: "欧洲海运报价规则.pdf",
+        type: "PDF",
+        status: "已完成",
+        size: "248KB",
+        updatedAt: "2026-06-25 18:40",
+        chunks: [
+          { id: "ck-004", chars: 88, embedding: "已完成", text: "重货优惠按 1:200、1:250、1:330 三档执行，单票计费重小于 200KG 无优惠。" },
+          { id: "ck-005", chars: 66, embedding: "已完成", text: "非亚马逊商业地址加收 100RMB/票，偏远地址另行核算。" },
+        ],
+      },
+      {
+        id: "doc-logistics-3",
+        name: "售后异常处理.txt",
+        type: "TXT",
+        status: "已完成",
+        size: "8KB",
+        updatedAt: "2026-06-24 09:15",
+        chunks: [
+          { id: "ck-006", chars: 64, embedding: "已完成", text: "派送异常需先确认签收截图、物流轨迹、收件地址和客户反馈，再进入工单处理。" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "kb-pricing",
+    name: "报价规则",
+    description: "渠道报价、附加费、计费重和异常费用。",
+    type: "表格",
+    sourceType: "CSV",
+    status: "索引中",
+    enabled: true,
+    documentCount: 2,
+    chunkCount: 86,
+    embeddingStatus: "处理中",
+    size: "56.4KB",
+    updatedAt: "2026-06-25 21:08",
+    createdAt: "2026-06-22 16:30",
+    icon: "￥",
+    documents: [
+      {
+        id: "doc-pricing-1",
+        name: "欧线报价表.csv",
+        type: "CSV",
+        status: "索引中",
+        size: "31KB",
+        updatedAt: "2026-06-25 21:08",
+        chunks: [
+          { id: "ck-101", chars: 58, embedding: "处理中", text: "德国商业地址 50KG 起收，燃油附加费按周更新。" },
+          { id: "ck-102", chars: 70, embedding: "处理中", text: "法国偏远地址需要二次确认，最终报价以系统账单为准。" },
+        ],
+      },
+      {
+        id: "doc-pricing-2",
+        name: "附加费说明.docx",
+        type: "Word",
+        status: "已完成",
+        size: "25.4KB",
+        updatedAt: "2026-06-24 17:46",
+        chunks: [
+          { id: "ck-103", chars: 62, embedding: "已完成", text: "超长、超重、偏远、住宅地址均可能产生附加费，报价前需确认货物尺寸。" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "kb-after-sales",
+    name: "售后 FAQ",
+    description: "签收异常、查件、赔付、退件等常见处理口径。",
+    type: "文本",
+    sourceType: "文本",
+    status: "启用",
+    enabled: true,
+    documentCount: 1,
+    chunkCount: 42,
+    embeddingStatus: "已完成",
+    size: "18.2KB",
+    updatedAt: "2026-06-24 14:22",
+    createdAt: "2026-06-20 10:00",
+    icon: "问",
+    documents: [
+      {
+        id: "doc-after-1",
+        name: "售后 FAQ 文本",
+        type: "文本",
+        status: "已完成",
+        size: "18.2KB",
+        updatedAt: "2026-06-24 14:22",
+        chunks: [
+          { id: "ck-201", chars: 80, embedding: "已完成", text: "客户反馈未收到包裹时，先确认签收状态和签收人信息，再判断是否需要发起 POD 查询。" },
+          { id: "ck-202", chars: 74, embedding: "已完成", text: "破损赔付需提供外箱照片、内物照片、面单照片、货值证明和客户反馈截图。" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "kb-tax",
+    name: "海关税率",
+    description: "品名、HS Code、税率和禁限运规则。",
+    type: "文档",
+    sourceType: "PDF",
+    status: "停用",
+    enabled: false,
+    documentCount: 4,
+    chunkCount: 210,
+    embeddingStatus: "已完成",
+    size: "420KB",
+    updatedAt: "2026-06-19 08:45",
+    createdAt: "2026-06-12 09:30",
+    icon: "税",
+    documents: [
+      {
+        id: "doc-tax-1",
+        name: "欧盟税率参考.pdf",
+        type: "PDF",
+        status: "已完成",
+        size: "420KB",
+        updatedAt: "2026-06-19 08:45",
+        chunks: [
+          { id: "ck-301", chars: 92, embedding: "已完成", text: "税率超过 6% 的产品需提前确认是否可接，特殊品类需要单独审核材质和用途。" },
+          { id: "ck-302", chars: 84, embedding: "已完成", text: "皮革、纺织品、鞋服、玩具、纯玻璃、纯塑料等品类默认拒收，特殊情况需人工确认。" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "kb-site",
+    name: "官网帮助中心",
+    description: "从公司帮助中心采集的公开页面。",
+    type: "网站",
+    sourceType: "网站",
+    status: "失败",
+    enabled: false,
+    documentCount: 0,
+    chunkCount: 0,
+    embeddingStatus: "采集失败",
+    size: "0KB",
+    updatedAt: "2026-06-18 22:10",
+    createdAt: "2026-06-18 22:00",
+    icon: "网",
+    documents: [],
   },
 ];
+
+if (typeof window !== "undefined") {
+  window.knowledgeBases = knowledgeBases;
+  window.knowledgeSupportedSources = knowledgeSupportedSources;
+  window.knowledgeStatusOptions = knowledgeStatusOptions;
+  window.knowledgeSortOptions = knowledgeSortOptions;
+}
