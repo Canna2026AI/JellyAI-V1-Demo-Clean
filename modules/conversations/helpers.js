@@ -263,6 +263,7 @@ function loadCustomConversationViews() {
 function saveCustomConversationViews(views) {
   const createdViews = views.filter((name) => !defaultCustomConversationViews.includes(name));
   writeJsonStorage(customViewStorageKey, createdViews);
+  syncConversationBackend(window.conversationService?.saveCustomViews(views));
 }
 
 function loadQuickMessageData() {
@@ -281,6 +282,7 @@ function loadQuickMessageData() {
 
 function saveQuickMessageData() {
   writeJsonStorage(quickMessageStorageKey, quickMessageData);
+  syncConversationBackend(window.conversationService?.saveQuickMessages(quickMessageData));
 }
 
 function loadConversationData() {
@@ -290,6 +292,7 @@ function loadConversationData() {
 
 function saveConversationData() {
   writeJsonStorage(conversationStorageKey, conversationData);
+  syncConversationBackend(window.conversationService?.saveConversations(conversationData));
 }
 
 function loadWorkHoursSettings() {
@@ -305,6 +308,7 @@ function loadWorkHoursSettings() {
 
 function saveWorkHoursSettings() {
   writeJsonStorage(workHoursStorageKey, workHoursSettings);
+  syncConversationBackend(window.conversationService?.saveWorkHours(workHoursSettings));
 }
 
 function loadAutomationSettings() {
@@ -314,6 +318,7 @@ function loadAutomationSettings() {
 
 function saveAutomationSettings() {
   writeJsonStorage(automationSettingsStorageKey, automationSettings);
+  syncConversationBackend(window.conversationService?.saveAutomation(automationSettings));
 }
 
 function loadForwardSettings() {
@@ -323,6 +328,7 @@ function loadForwardSettings() {
 
 function saveForwardSettings() {
   writeJsonStorage(forwardSettingsStorageKey, forwardSettings);
+  syncConversationBackend(window.conversationService?.saveForwarding(forwardSettings));
 }
 
 function mergePlainObject(base, patch) {
@@ -344,6 +350,45 @@ const conversationData = loadConversationData();
 const workHoursSettings = loadWorkHoursSettings();
 const automationSettings = loadAutomationSettings();
 const forwardSettings = loadForwardSettings();
+
+async function initConversationBackendState() {
+  if (!window.conversationService) return false;
+  const backendState = await window.conversationService.loadState();
+  if (!backendState) return false;
+  applyConversationBackendState(backendState);
+  return true;
+}
+
+function applyConversationBackendState(backendState) {
+  replaceArray(customConversationViews, Array.isArray(backendState.customViews) ? backendState.customViews : customConversationViews);
+  replaceObject(quickMessageData, backendState.quickMessages || quickMessageData);
+  replaceArray(conversationData, Array.isArray(backendState.conversations) ? backendState.conversations : conversationData);
+  replaceObject(workHoursSettings, backendState.settings?.workHours || workHoursSettings);
+  replaceObject(automationSettings, backendState.settings?.automation || automationSettings);
+  replaceObject(forwardSettings, backendState.settings?.forwarding || forwardSettings);
+  writeJsonStorage(customViewStorageKey, customConversationViews.filter((name) => !defaultCustomConversationViews.includes(name)));
+  writeJsonStorage(quickMessageStorageKey, quickMessageData);
+  writeJsonStorage(conversationStorageKey, conversationData);
+  writeJsonStorage(workHoursStorageKey, workHoursSettings);
+  writeJsonStorage(automationSettingsStorageKey, automationSettings);
+  writeJsonStorage(forwardSettingsStorageKey, forwardSettings);
+}
+
+function replaceArray(target, source) {
+  target.splice(0, target.length, ...structuredClone(source || []));
+}
+
+function replaceObject(target, source) {
+  Object.keys(target).forEach((key) => delete target[key]);
+  Object.assign(target, structuredClone(source || {}));
+}
+
+function syncConversationBackend(syncPromise) {
+  if (!syncPromise || typeof syncPromise.catch !== "function") return;
+  syncPromise.catch((error) => {
+    console.warn("Conversation backend sync failed:", error.message);
+  });
+}
 
 function getAllConversations() {
   return conversationData;

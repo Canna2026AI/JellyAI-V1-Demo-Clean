@@ -1,6 +1,46 @@
-# Conversations Backend TODO
+# Conversations Backend
 
-当前聚合对话模块仅使用前端 mock state 与 localStorage，不接真实后端。后续接入真实服务前，建议先确认以下后端契约、数据模型和基础设施边界。
+当前仓库已内置本地可运行后端：
+
+- `server.js` 同时提供静态文件服务和 `/api/conversations/*`。
+- `server/conversationsStore.js` 使用 `.jelly-data/conversations-store.json` 做 JSON 持久化。
+- `services/conversationsService.js` 会在后端可用时读写真实 API；后端不可用时自动降级到 localStorage。
+
+以下内容分为“当前已实现的本地 API”和“生产化后端 TODO”。本地 API 可用于真实演示、刷新后持久化、curl 验证和浏览器端到端测试；生产 TODO 用于未来替换为正式数据库、队列、鉴权和第三方 SDK。
+
+## Local API Implemented
+
+- `GET /api/health`
+- `GET /api/conversations/state`
+- `GET /api/conversations`
+- `PUT /api/conversations`
+- `GET /api/conversations/:id`
+- `PATCH /api/conversations/:id`
+- `POST /api/conversations/:id/messages`
+- `PATCH /api/conversations/:id/status`
+- `PATCH /api/conversations/:id/assignee`
+- `PATCH /api/conversations/:id/tags`
+- `PATCH /api/conversations/:id/hosting`
+- `PATCH /api/conversations/:id/star`
+- `PATCH /api/conversations/:id/read`
+- `GET /api/conversations/custom-views`
+- `PUT /api/conversations/custom-views`
+- `POST /api/conversations/custom-views`
+- `GET /api/conversations/quick-replies`
+- `PUT /api/conversations/quick-replies`
+- `POST /api/conversations/quick-replies`
+- `PATCH /api/conversations/quick-replies/:id`
+- `DELETE /api/conversations/quick-replies/:id`
+- `POST /api/conversations/quick-reply-groups`
+- `GET /api/conversations/settings`
+- `PATCH /api/conversations/settings/worktime`
+- `PATCH /api/conversations/settings/automation`
+- `PATCH /api/conversations/settings/forwarding`
+- `POST /api/conversations/webhooks/:provider/messages`
+
+## Production TODO
+
+后续接入生产服务前，建议继续确认以下后端契约、数据模型和基础设施边界。
 
 ## API
 
