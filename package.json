@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "check:js": "find . -name '*.js' -type f -print0 | sort -z | xargs -0 -n1 node --check"
+    "check:js": "find . -name '*.js' -type f -print0 | sort -z | xargs -0 -n1 node --check",
+    "test:api": "node scripts/test-conversations-api.js"
   }
 }

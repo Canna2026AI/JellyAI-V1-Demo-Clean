@@ -66,12 +66,28 @@ async function handleApi(req, res, requestUrl) {
     return;
   }
 
+  if (pathname === "/api/conversations/meta" && req.method === "GET") {
+    const store = readStore();
+    sendJson(res, 200, buildConversationMeta(store));
+    return;
+  }
+
+  if (pathname === "/api/conversations/audit-logs" && req.method === "GET") {
+    handleAuditLogs(req, res, requestUrl);
+    return;
+  }
+
   if (pathname === "/api/conversations" && req.method === "GET") {
     const store = readStore();
+    const filteredItems = filterConversations(store.conversations, requestUrl.searchParams);
+    const page = paginate(filteredItems, requestUrl.searchParams);
     sendJson(res, 200, {
-      items: filterConversations(store.conversations, requestUrl.searchParams),
+      items: page.items,
       total: store.conversations.length,
+      filteredTotal: filteredItems.length,
+      page: page.meta,
       customViews: store.customViews,
+      meta: buildConversationMeta(store),
     });
     return;
   }
@@ -115,14 +131,14 @@ async function handleApi(req, res, requestUrl) {
 
   const match = pathname.match(/^\/api\/conversations\/([^/]+)(?:\/([^/]+))?$/);
   if (match) {
-    await handleConversationResource(req, res, decodeURIComponent(match[1]), match[2]);
+    await handleConversationResource(req, res, requestUrl, decodeURIComponent(match[1]), match[2]);
     return;
   }
 
   sendJson(res, 404, { error: "not_found", message: "接口不存在" });
 }
 
-async function handleConversationResource(req, res, conversationId, action) {
+async function handleConversationResource(req, res, requestUrl, conversationId, action) {
   if (!action && req.method === "GET") {
     const store = readStore();
     const conversation = findConversation(store, conversationId);
@@ -156,6 +172,15 @@ async function handleConversationResource(req, res, conversationId, action) {
     return;
   }
 
+  if (action === "messages" && req.method === "GET") {
+    const store = readStore();
+    const conversation = findConversation(store, conversationId);
+    if (!conversation) return sendJson(res, 404, { error: "not_found", message: "会话不存在" });
+    const page = paginate(conversation.messages || [], requestUrl.searchParams);
+    sendJson(res, 200, { items: page.items, total: (conversation.messages || []).length, page: page.meta });
+    return;
+  }
+
   if (action === "messages" && req.method === "POST") {
     const body = await readJsonBody(req);
     const { result } = withStore((store) => {
@@ -163,6 +188,7 @@ async function handleConversationResource(req, res, conversationId, action) {
       const message = appendMessage(conversation, {
         id: body.clientMessageId,
         role: body.role || "me",
+        type: body.type || "text",
         text: body.content || body.text,
         meta: body.meta,
       });
@@ -220,6 +246,22 @@ async function handleConversationResource(req, res, conversationId, action) {
       }
       touchConversation(conversation);
       addAudit(store, conversationId, "conversation.tags", { tags: conversation.tags });
+      return conversation;
+    });
+    sendJson(res, 200, { conversation: result });
+    return;
+  }
+
+  if (action === "customer" && req.method === "PATCH") {
+    const body = await readJsonBody(req);
+    const { result } = withStore((store) => {
+      const conversation = requireConversation(store, conversationId);
+      conversation.customer = {
+        ...(conversation.customer || {}),
+        ...pickCustomerPatch(body),
+      };
+      touchConversation(conversation);
+      addAudit(store, conversationId, "conversation.customer", pickCustomerPatch(body));
       return conversation;
     });
     sendJson(res, 200, { conversation: result });
@@ -286,6 +328,22 @@ async function handleCustomViews(req, res) {
   }
 
   sendJson(res, 405, { error: "method_not_allowed" });
+}
+
+function handleAuditLogs(req, res, requestUrl) {
+  if (req.method !== "GET") {
+    sendJson(res, 405, { error: "method_not_allowed" });
+    return;
+  }
+  const store = readStore();
+  const conversationId = requestUrl.searchParams.get("conversationId");
+  const action = requestUrl.searchParams.get("action");
+  const logs = [...store.auditLogs]
+    .filter((item) => !conversationId || item.conversationId === conversationId)
+    .filter((item) => !action || item.action === action)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const page = paginate(logs, requestUrl.searchParams);
+  sendJson(res, 200, { items: page.items, total: logs.length, page: page.meta });
 }
 
 async function handleQuickReplies(req, res, pathname) {
@@ -454,6 +512,33 @@ function filterConversations(conversations, params) {
   });
 }
 
+function paginate(items, params) {
+  const limit = clampNumber(Number(params.get("limit") || 30), 1, 100);
+  const offset = clampNumber(Number(params.get("cursor") || 0), 0, Number.MAX_SAFE_INTEGER);
+  const safeOffset = Math.min(offset, items.length);
+  const nextOffset = safeOffset + limit;
+  return {
+    items: items.slice(safeOffset, nextOffset),
+    meta: {
+      cursor: String(safeOffset),
+      nextCursor: nextOffset < items.length ? String(nextOffset) : null,
+      limit,
+      hasMore: nextOffset < items.length,
+    },
+  };
+}
+
+function buildConversationMeta(store) {
+  return {
+    currentAgent: currentAgentName,
+    customViews: store.customViews,
+    channels: Array.from(new Set(store.conversations.map((item) => item.channel))).sort((a, b) => a.localeCompare(b, "zh-CN")),
+    statuses: Array.from(new Set(store.conversations.map((item) => item.status))),
+    quickReplyGroups: store.quickMessages.groups.length,
+    quickReplies: store.quickMessages.replies.length,
+  };
+}
+
 function matchesView(conversation, view) {
   if (view === "全部对话") return true;
   if (view === "人工对话") return conversation.type === "manual";
@@ -494,6 +579,11 @@ function pickConversationPatch(body) {
   return Object.fromEntries(Object.entries(body || {}).filter(([key]) => allowed.includes(key)));
 }
 
+function pickCustomerPatch(body) {
+  const allowed = ["name", "phone", "company", "city", "remark"];
+  return Object.fromEntries(Object.entries(body || {}).filter(([key]) => allowed.includes(key)).map(([key, value]) => [key, String(value || "").trim()]));
+}
+
 function findConversation(store, id) {
   return store.conversations.find((conversation) => conversation.id === id);
 }
@@ -512,8 +602,11 @@ function appendMessage(conversation, input) {
   const message = {
     id: input.id || createId("msg"),
     role,
+    type: input.type || "text",
     text,
     createdAt: timeLabel(),
+    createdAtIso: new Date().toISOString(),
+    status: role === "me" ? "sent" : "received",
   };
   if (input.meta) message.meta = String(input.meta);
   conversation.messages.push(message);
@@ -694,6 +787,11 @@ function validateText(value, field) {
 
 function uniqueStrings(values) {
   return Array.from(new Set((values || []).map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
+function clampNumber(value, min, max) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.floor(value)));
 }
 
 function createId(prefix) {
