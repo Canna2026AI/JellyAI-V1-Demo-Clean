@@ -264,6 +264,24 @@
   visibility: visible;
 }
 
+.conv-refine-bar {
+  padding: 0 12px 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.conv-refine-bar select,
+.conv-info-select {
+  min-width: 0;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fff;
+  color: #344054;
+  outline: 0;
+}
+
 .unread-dot {
   display: inline-block;
   width: 7px;
@@ -806,11 +824,30 @@
   display: flex;
   gap: 10px;
   align-items: center;
+  cursor: pointer;
 }
 
 .conv-item.active {
   background: #eef4ff;
   border-left: 3px solid var(--blue);
+}
+
+.conv-item:hover {
+  background: #f7f9fc;
+}
+
+.conv-item-tags {
+  margin-top: 5px;
+  display: flex;
+  gap: 5px;
+}
+
+.conv-item-tags span {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #667085;
+  font-size: 11px;
 }
 
 .conv-status {
@@ -892,10 +929,49 @@
   padding: 0 14px;
 }
 
+.conv-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.conv-head-sub {
+  color: #667085;
+  font-size: 12px;
+}
+
 .conv-messages {
   flex: 1;
   overflow: auto;
   padding: 18px;
+}
+
+.conv-quick-strip {
+  min-height: 38px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  overflow-x: auto;
+}
+
+.conv-quick-strip button {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid #d6dce6;
+  border-radius: 999px;
+  background: #fff;
+  color: #344054;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.conv-quick-strip button:hover {
+  border-color: var(--blue);
+  color: var(--blue);
 }
 
 .conv-compose {
@@ -909,6 +985,87 @@
   border-right: 0;
   border-left: 1px solid var(--line);
   padding: 14px;
+}
+
+.conv-info table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.conv-info td {
+  padding: 5px 0;
+  vertical-align: top;
+}
+
+.conv-info td:first-child {
+  width: 82px;
+  color: #667085;
+}
+
+.conv-info-select {
+  width: 100%;
+}
+
+.conv-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.conv-tag-list button {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid #d6dce6;
+  border-radius: 999px;
+  background: #fff;
+  color: #667085;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.conv-tag-list button.active {
+  border-color: #cfe0ff;
+  background: #eef4ff;
+  color: var(--blue);
+}
+
+.conv-tag-add {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+
+.conv-tag-add input {
+  min-width: 0;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 8px;
+  outline: 0;
+}
+
+.conv-loading {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  color: #667085;
+}
+
+.conv-loading span {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #dbe7ff;
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: conv-spin .8s linear infinite;
+}
+
+@keyframes conv-spin {
+  to { transform: rotate(360deg); }
 }
 
 .chat-guide {
@@ -956,3 +1113,32 @@
   flex: 0 0 auto;
 }
 
+.message-system {
+  margin: 16px;
+  text-align: center;
+}
+
+.message-system span {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef1f5;
+  color: #8a96a8;
+  font-size: 12px;
+}
+
+.message-role {
+  margin-bottom: 4px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.message-role span {
+  margin-left: 8px;
+  color: #98a2b3;
+}
+
+.message-role.me { color: var(--blue); }
+.message-role.ai { color: #12a884; }
+.message-role.customer,
+.message-role.other { color: #667085; }

@@ -1,7 +1,7 @@
 // Aggregated conversation page and modal events.
 
 function bindConversationEvents() {
-document.querySelector("[data-agent-status-toggle]")?.addEventListener("click", (event) => {
+  document.querySelector("[data-agent-status-toggle]")?.addEventListener("click", (event) => {
     event.stopPropagation();
     setState({ agentStatusOpen: !state.agentStatusOpen });
   });
@@ -13,11 +13,11 @@ document.querySelector("[data-agent-status-toggle]")?.addEventListener("click", 
     })
   );
 
-document.querySelectorAll("[data-chat-settings-open]").forEach((el) =>
+  document.querySelectorAll("[data-chat-settings-open]").forEach((el) =>
     el.addEventListener("click", () => setState({ chatSettingsOpen: true, chatSettingsTab: el.dataset.chatSettingsOpen, chatSortOpen: false, chatSearchOpen: false, agentStatusOpen: false }))
   );
 
-document.querySelectorAll("[data-chat-filter]").forEach((el) =>
+  document.querySelectorAll("[data-chat-filter]").forEach((el) =>
     el.addEventListener("click", () => setState({ chatFilter: el.dataset.chatFilter, selectedConversation: null, chatSettingsOpen: false, chatSortOpen: false, chatSearchModeOpen: false, chatSearchQuery: "" }))
   );
   document.querySelectorAll("[data-chat-settings]").forEach((el) =>
@@ -29,24 +29,73 @@ document.querySelectorAll("[data-chat-filter]").forEach((el) =>
   document.querySelectorAll("[data-chat-settings-tab]").forEach((el) =>
     el.addEventListener("click", () => setState({ chatSettingsTab: el.dataset.chatSettingsTab }))
   );
-  document.querySelector("[data-work-hours-switch]")?.addEventListener("click", () =>
-    setState({ workHoursEnabled: !state.workHoursEnabled })
-  );
-  document.querySelector("[data-add-work-time]")?.addEventListener("click", () =>
-    setState({ workTimeRangeCount: state.workTimeRangeCount + 1 })
-  );
-  document.querySelectorAll("[data-remove-work-time]").forEach((el) =>
-    el.addEventListener("click", () => setState({ workTimeRangeCount: Math.max(1, state.workTimeRangeCount - 1) }))
-  );
-  document.querySelector("[data-add-work-schedule]")?.addEventListener("click", () =>
-    setState({ workScheduleCount: state.workScheduleCount + 1 })
-  );
+
+  bindWorkHoursEvents();
+  bindQuickMessageSettingsEvents();
+  bindConversationListEvents();
+  bindConversationDetailEvents();
+  bindConversationInfoEvents();
+}
+
+function bindWorkHoursEvents() {
+  document.querySelector("[data-work-hours-switch]")?.addEventListener("click", () => {
+    workHoursSettings.enabled = !workHoursSettings.enabled;
+    saveWorkHoursSettings();
+    setState({});
+  });
+  document.querySelectorAll("[data-add-work-time]").forEach((el) => el.addEventListener("click", () => {
+    const index = Number(el.dataset.addWorkTime);
+    workHoursSettings.schedules[index]?.ranges.push({ start: "09:00", end: "18:00" });
+    saveWorkHoursSettings();
+    setState({});
+  }));
+  document.querySelectorAll("[data-remove-work-time]").forEach((el) => el.addEventListener("click", () => {
+    const [scheduleIndex, rangeIndex] = el.dataset.removeWorkTime.split(":").map(Number);
+    const schedule = workHoursSettings.schedules[scheduleIndex];
+    if (!schedule) return;
+    schedule.ranges.splice(rangeIndex, 1);
+    if (!schedule.ranges.length) schedule.ranges.push({ start: "09:00", end: "18:00" });
+    saveWorkHoursSettings();
+    setState({});
+  }));
+  document.querySelector("[data-add-work-schedule]")?.addEventListener("click", () => {
+    workHoursSettings.schedules.push({ day: "周一至周五", ranges: [{ start: "09:00", end: "18:00" }] });
+    saveWorkHoursSettings();
+    setState({});
+  });
   document.querySelectorAll("[data-remove-work-schedule]").forEach((el) =>
-    el.addEventListener("click", () => setState({ workScheduleCount: Math.max(1, state.workScheduleCount - 1) }))
+    el.addEventListener("click", () => {
+      workHoursSettings.schedules.splice(Number(el.dataset.removeWorkSchedule), 1);
+      if (!workHoursSettings.schedules.length) workHoursSettings.schedules.push({ day: "周一至周五", ranges: [{ start: "09:00", end: "18:00" }] });
+      saveWorkHoursSettings();
+      setState({});
+    })
   );
+  document.querySelector("[data-work-hours-save]")?.addEventListener("click", () => {
+    syncWorkHoursFromDom();
+    saveWorkHoursSettings();
+    showToast("工作时间设置已保存");
+    setState({ chatSettingsOpen: false });
+  });
   document.querySelector("[data-chat-settings-back]")?.addEventListener("click", () =>
     setState({ chatSettingsOpen: false })
   );
+}
+
+function syncWorkHoursFromDom() {
+  const schedules = Array.from(document.querySelectorAll("[data-work-schedule-row]")).map((row) => ({
+    day: row.querySelector("[data-work-day]")?.value || "周一至周五",
+    ranges: Array.from(row.querySelectorAll("[data-work-range-row]")).map((range) => ({
+      start: range.querySelector("[data-work-start]")?.value || "09:00",
+      end: range.querySelector("[data-work-end]")?.value || "18:00",
+    })),
+  }));
+  workHoursSettings.schedules = schedules.length ? schedules : [{ day: "周一至周五", ranges: [{ start: "09:00", end: "18:00" }] }];
+  workHoursSettings.afterHoursAction = document.querySelector("[data-after-hours-action]")?.value || workHoursSettings.afterHoursAction;
+  workHoursSettings.afterHoursText = document.querySelector("[data-after-hours-text]")?.textContent.trim() || workHoursSettings.afterHoursText;
+}
+
+function bindQuickMessageSettingsEvents() {
   const quickMessageSearch = document.querySelector("[data-quick-message-search]");
   if (quickMessageSearch) quickMessageSearch.addEventListener("input", () => {
     const query = quickMessageSearch.value;
@@ -56,12 +105,17 @@ document.querySelectorAll("[data-chat-filter]").forEach((el) =>
     nextInput?.setSelectionRange(query.length, query.length);
   });
   document.querySelectorAll("[data-quick-reply-delete]").forEach((el) => el.addEventListener("click", () => {
-    const index = quickMessageData.replies.findIndex((reply) => reply.id === el.dataset.quickReplyDelete);
-    if (index >= 0) quickMessageData.replies.splice(index, 1);
-    saveQuickMessageData();
-    setState({});
-    showToast("快捷回复已删除");
+    openConversationConfirm("删除快捷回复", "删除后当前 Demo 中将不再展示该快捷回复。", "删除", () => {
+      const index = quickMessageData.replies.findIndex((reply) => reply.id === el.dataset.quickReplyDelete);
+      if (index >= 0) quickMessageData.replies.splice(index, 1);
+      saveQuickMessageData();
+      state.modal = null;
+      showToast("快捷回复已删除");
+    });
   }));
+}
+
+function bindConversationListEvents() {
   const chatSortToggle = document.querySelector("[data-chat-sort-toggle]");
   if (chatSortToggle) chatSortToggle.addEventListener("click", () => setState({ chatSortOpen: !state.chatSortOpen }));
   document.querySelectorAll("[data-chat-sort]").forEach((el) =>
@@ -82,35 +136,105 @@ document.querySelectorAll("[data-chat-filter]").forEach((el) =>
   );
   const chatSearchInput = document.querySelector("[data-chat-search-input]");
   if (chatSearchInput) chatSearchInput.addEventListener("input", () => {
-    state.chatSearchQuery = chatSearchInput.value;
-    const conversations = sortConversations(conversationMap[state.chatFilter] || []).filter(matchesConversationSearch);
-    const listHead = document.querySelector(".conv-search-panel");
-    if (!listHead) return;
-    let node = listHead.nextElementSibling;
-    while (node && !node.classList.contains("join-card")) {
-      const next = node.nextElementSibling;
-      node.remove();
-      node = next;
-    }
-    listHead.insertAdjacentHTML("afterend", conversations.length
-      ? conversations.map((item) => renderConversationItem(item)).join("")
-      : `<div class="empty" style="min-height:240px">未找到匹配的对话</div>`);
-    document.querySelectorAll("[data-conversation]").forEach((el) =>
-      el.addEventListener("click", () => setState({ selectedConversation: el.dataset.conversation }))
-    );
+    const query = chatSearchInput.value;
+    setState({ chatSearchQuery: query });
+    const nextInput = document.querySelector("[data-chat-search-input]");
+    nextInput?.focus();
+    nextInput?.setSelectionRange(query.length, query.length);
   });
-  const chatSearchClose = document.querySelector("[data-chat-search-close]");
-  if (chatSearchClose) chatSearchClose.addEventListener("click", () => setState({ chatSearchOpen: false, chatSearchModeOpen: false, chatSearchQuery: "" }));
+  document.querySelector("[data-chat-search-close]")?.addEventListener("click", () => setState({ chatSearchOpen: false, chatSearchModeOpen: false, chatSearchQuery: "" }));
+  document.querySelector("[data-chat-status-filter]")?.addEventListener("change", (event) => setState({ chatStatusFilter: event.target.value, selectedConversation: null }));
+  document.querySelector("[data-chat-channel-filter]")?.addEventListener("change", (event) => setState({ chatChannelFilter: event.target.value, selectedConversation: null }));
   document.querySelectorAll("[data-conversation]").forEach((el) =>
-    el.addEventListener("click", () => setState({ selectedConversation: el.dataset.conversation }))
+    el.addEventListener("click", () => {
+      markConversationRead(el.dataset.conversation);
+      setState({ selectedConversation: el.dataset.conversation, chatLoading: true, chatSortOpen: false, chatSearchModeOpen: false });
+      window.setTimeout(() => {
+        if (state.selectedConversation === el.dataset.conversation) setState({ chatLoading: false });
+      }, 180);
+    })
   );
+  document.querySelector("[data-hide-channel-promo]")?.addEventListener("click", (event) => {
+    event.currentTarget.closest(".join-card")?.remove();
+  });
+}
 
-const convSend = document.getElementById("convSend");
+function bindConversationDetailEvents() {
+  document.querySelectorAll("[data-quick-insert]").forEach((el) => el.addEventListener("click", () => {
+    const reply = quickMessageData.replies.find((item) => item.id === el.dataset.quickInsert);
+    const input = document.getElementById("convInput");
+    if (!reply || !input) return;
+    const prefix = input.value.trim() ? `${input.value.trim()}\n` : "";
+    input.value = `${prefix}${reply.content}`;
+    input.focus();
+    showToast("快捷回复已插入");
+  }));
+  const convSend = document.getElementById("convSend");
   if (convSend) convSend.addEventListener("click", sendConvMessage);
+  const input = document.getElementById("convInput");
+  if (input) input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    event.preventDefault();
+    sendConvMessage();
+  });
+}
+
+function bindConversationInfoEvents() {
+  document.querySelector("[data-transfer-human]")?.addEventListener("click", () => {
+    const conv = getSelectedConversation();
+    if (!conv) return;
+    openConversationConfirm("转入人工", `确认将“${conv.name}”转入 Kelvin 处理？`, "确认转入", () => {
+      transferConversationToHuman(conv.id);
+      state.modal = null;
+      showToast("已转入人工");
+    });
+  });
+  document.querySelector("[data-conversation-status]")?.addEventListener("change", (event) => {
+    const conv = getSelectedConversation();
+    if (!conv) return;
+    updateConversationStatus(conv.id, event.target.value);
+    showToast("会话状态已更新");
+    setState({});
+  });
+  document.querySelectorAll("[data-customer-tag]").forEach((el) => el.addEventListener("click", () => {
+    const conv = getSelectedConversation();
+    if (!conv) return;
+    toggleConversationTag(conv.id, el.dataset.customerTag);
+    showToast("客户标签已更新");
+    setState({});
+  }));
+  document.querySelector("[data-add-customer-tag]")?.addEventListener("click", () => {
+    const conv = getSelectedConversation();
+    const input = document.querySelector("[data-new-customer-tag]");
+    if (!conv || !input) return;
+    if (!addConversationTag(conv.id, input.value)) {
+      showToast("请输入标签名称");
+      return;
+    }
+    showToast("客户标签已添加");
+    setState({});
+  });
+  document.querySelector("[data-hosted-toggle]")?.addEventListener("click", () => {
+    const conv = getSelectedConversation();
+    if (!conv) return;
+    const enabled = toggleConversationHosted(conv.id);
+    showToast(`托管状态已${enabled ? "开启" : "暂停"}`);
+    setState({});
+  });
+  document.querySelector("[data-star-conversation]")?.addEventListener("click", () => {
+    const conv = getSelectedConversation();
+    if (!conv) return;
+    conv.starred = !conv.starred;
+    if (conv.starred && !conv.viewTags.includes("收藏")) conv.viewTags.push("收藏");
+    if (!conv.starred) conv.viewTags = conv.viewTags.filter((tag) => tag !== "收藏");
+    saveConversationData();
+    showToast(conv.starred ? "已收藏会话" : "已取消收藏");
+    setState({});
+  });
 }
 
 function bindConversationModalEvents() {
-document.querySelectorAll("[data-custom-view-step]").forEach((el) =>
+  document.querySelectorAll("[data-custom-view-step]").forEach((el) =>
     el.addEventListener("click", () => {
       const targetStep = Number(el.dataset.customViewStep);
       if (targetStep < state.customViewStep) setState({ customViewStep: targetStep, customViewFieldOpen: false });
@@ -146,7 +270,6 @@ document.querySelectorAll("[data-custom-view-step]").forEach((el) =>
         return;
       }
       customConversationViews.push(viewName);
-      conversationMap[viewName] = [];
       saveCustomConversationViews(customConversationViews);
       setState({ modal: null, customViewStep: 1, customViewName: "", customViewFilterRows: 1, customViewFieldOpen: false, customViewManual: false, chatFilter: viewName, selectedConversation: null });
       showToast(`对话组“${viewName}”已创建`);
@@ -155,7 +278,7 @@ document.querySelectorAll("[data-custom-view-step]").forEach((el) =>
     setState({ customViewStep: state.customViewStep + 1, customViewFieldOpen: false });
   });
 
-const quickReplyRequired = document.querySelectorAll("[data-quick-reply-required]");
+  const quickReplyRequired = document.querySelectorAll("[data-quick-reply-required]");
   if (quickReplyRequired.length) {
     const updateQuickReplySave = () => {
       const group = document.getElementById("quickReplyGroup")?.value;
@@ -186,8 +309,19 @@ const quickReplyRequired = document.querySelectorAll("[data-quick-reply-required
 
 function sendConvMessage() {
   const input = document.getElementById("convInput");
-  const text = input.value.trim();
-  if (!text) return;
-  state.convMessages.push({ role: "me", text });
-  render();
+  const text = input?.value.trim();
+  const conv = getSelectedConversation();
+  if (!input || !conv) return;
+  if (!text) {
+    showToast("请输入回复内容");
+    return;
+  }
+  addConversationMessage(conv.id, text, "me");
+  input.value = "";
+  showToast("消息已发送");
+  setState({});
+  requestAnimationFrame(() => {
+    const box = document.querySelector(".conv-messages");
+    if (box) box.scrollTop = box.scrollHeight;
+  });
 }
