@@ -7,6 +7,43 @@ function bindWecomEvents() {
     el.addEventListener("click", () => setState({ wechatTab: el.dataset.wechatTab }))
   );
 
+  document.querySelectorAll("[data-wecom-account-top-action]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const action = el.dataset.wecomAccountTopAction;
+      if (action === "group") {
+        setState({ modal: "groupMembers" });
+        return;
+      }
+      if (action === "sidebar") {
+        setState({ modal: "wecomSidebarConfig" });
+        return;
+      }
+      showToast("已显示托管账号列表");
+    })
+  );
+
+  document.querySelectorAll("[data-wecom-member-view]").forEach((el) =>
+    el.addEventListener("click", () => {
+      if (el.dataset.wecomMemberView === "members") {
+        setState({ modal: "groupMembers" });
+        return;
+      }
+      showToast("已显示账号列表");
+    })
+  );
+
+  document.querySelectorAll("[data-wecom-member-search-inline]").forEach((el) =>
+    el.addEventListener("input", () => {
+      state.wecomMemberSearch = el.value;
+      render();
+      const next = document.querySelector("[data-wecom-member-search-inline]");
+      if (next) {
+        next.focus();
+        next.setSelectionRange(next.value.length, next.value.length);
+      }
+    })
+  );
+
   document.querySelectorAll("[data-wechat-filter]").forEach((el) => {
     const updateWechatFilter = () => {
       state[el.dataset.wechatFilter] = el.value;
@@ -134,11 +171,13 @@ function bindWecomEvents() {
       }
       if (action === "restart") {
         state.wecomLoading.accounts = true;
+        state.wecomLoading.accountActionId = account.id;
         window.wecomService?.updateAccountStatus(account.id, "初始化中");
         showToast("托管实例正在重启");
         render();
         window.setTimeout(() => {
           state.wecomLoading.accounts = false;
+          state.wecomLoading.accountActionId = null;
           window.wecomService?.updateAccountStatus(account.id, "在线");
           render();
           showToast("托管实例已恢复在线");
@@ -225,13 +264,83 @@ function bindWecomEvents() {
     })
   );
 
+  document.querySelectorAll("[data-wecom-workbench-action]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const action = el.dataset.wecomWorkbenchAction;
+      const result = window.wecomService?.runWorkbenchAction(action);
+      if (action === "消息群发") {
+        setState({ wechatTab: "console" });
+        showToast(result || "已进入机器人控制台");
+        return;
+      }
+      showToast(result || `${action}已记录`);
+      render();
+    })
+  );
+
+  ["consoleTargetType", "consoleContact", "consoleGroup"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("change", updateConsoleTargetField);
+  });
+
   document.querySelectorAll("[data-console-action]").forEach((el) =>
     el.addEventListener("click", () => runConsoleAction(el.dataset.consoleAction))
   );
 }
 
 function bindWecomModalEvents() {
-  // WeCom modal actions are handled by shared data-modal-ok callbacks.
+  document.querySelectorAll("[data-wecom-member-search]").forEach((el) =>
+    el.addEventListener("input", () => {
+      state.wecomMemberSearch = el.value;
+      render();
+      const next = document.querySelector("[data-wecom-member-search]");
+      if (next) {
+        next.focus();
+        next.setSelectionRange(next.value.length, next.value.length);
+      }
+    })
+  );
+  document.querySelectorAll("[data-wecom-member-toggle]").forEach((el) =>
+    el.addEventListener("change", () => {
+      const id = el.dataset.wecomMemberToggle;
+      if (el.checked && !state.wecomSelectedMemberIds.includes(id)) state.wecomSelectedMemberIds.push(id);
+      if (!el.checked) state.wecomSelectedMemberIds = state.wecomSelectedMemberIds.filter((item) => item !== id);
+      render();
+      showToast("成员选择已更新");
+    })
+  );
+  document.querySelectorAll("[data-wecom-member-remove]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.wecomSelectedMemberIds = state.wecomSelectedMemberIds.filter((item) => item !== el.dataset.wecomMemberRemove);
+      render();
+      showToast("成员已移除");
+    })
+  );
+  document.querySelectorAll("[data-wecom-member-action='clear']").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.wecomSelectedMemberIds = [];
+      render();
+      showToast("已清除所选成员");
+    })
+  );
+}
+
+function updateConsoleTargetField() {
+  const targetType = document.getElementById("consoleTargetType")?.value || "群聊";
+  const contactId = document.getElementById("consoleContact")?.value || "";
+  const groupId = document.getElementById("consoleGroup")?.value || "";
+  const target = document.getElementById("consoleTarget");
+  state.wecomConsoleTargetType = targetType;
+  state.wecomConsoleContactId = contactId;
+  state.wecomConsoleGroupId = groupId;
+  if (!target) return;
+  if (targetType === "群聊") {
+    const group = window.wecomService?.getGroup(groupId);
+    target.value = group ? `${group.id} / ${group.name}` : "";
+    return;
+  }
+  const contact = state.wecomContacts?.find((item) => item.id === contactId);
+  target.value = contact ? `${contact.id} / ${contact.name}` : "";
 }
 
 function runConsoleAction(action) {
@@ -239,6 +348,9 @@ function runConsoleAction(action) {
   const targetType = document.getElementById("consoleTargetType")?.value || "群聊";
   const contactId = document.getElementById("consoleContact")?.value || "";
   const groupId = document.getElementById("consoleGroup")?.value || "";
+  state.wecomConsoleTargetType = targetType;
+  state.wecomConsoleContactId = contactId;
+  state.wecomConsoleGroupId = groupId;
   const targetId = targetType === "群聊" ? groupId : contactId;
   const targetName = document.getElementById("consoleTarget")?.value.trim() || (targetType === "群聊" ? window.wecomService?.getGroup(groupId)?.name : state.wecomContacts?.find((contact) => contact.id === contactId)?.name) || "未选择目标";
   const message = document.getElementById("consoleMessage")?.value.trim() || "未填写消息内容";

@@ -84,26 +84,55 @@ if (state.modal === "wecomAccountEdit") {
   }
 
 if (state.modal === "groupMembers") {
+    const members = window.wecomService?.listTeamMembers() || [];
+    const selectedMembers = (state.wecomTeamMembers || []).filter((member) => state.wecomSelectedMemberIds.includes(member.id));
     return modal("编辑组内成员", `
       <div class="member-modal-body">
         <div class="member-picker">
           <h3>非成员组成员</h3>
-          <input class="input" style="width:100%" placeholder="请输入搜索内容" />
+          <input class="input" data-wecom-member-search style="width:100%" placeholder="请输入搜索内容" value="${escapeHtml(state.wecomMemberSearch)}" />
           <p class="subtle">指定成员加入小组；想要实现小组成员随部门自动变更，可创建动态成员组并绑定小组。</p>
           <div class="member-tree">
-            <div class="tree-row">⌄ <input type="checkbox"> 📁 gs4758</div>
-            <div class="tree-row child"><input type="checkbox" checked> <span class="member-dot">6</span> 6</div>
+            <div class="tree-row">⌄ <input type="checkbox" checked disabled> 📁 gs4758</div>
+            ${members.length ? members.map((member) => `<label class="tree-row child">
+              <input type="checkbox" data-wecom-member-toggle="${escapeHtml(member.id)}" ${state.wecomSelectedMemberIds.includes(member.id) ? "checked" : ""}>
+              <span class="member-dot">${escapeHtml(member.name.slice(0, 1))}</span>
+              ${escapeHtml(member.name)} · ${escapeHtml(member.role)}
+            </label>`).join("") : `<div class="empty">暂无匹配成员</div>`}
           </div>
         </div>
         <div class="member-picked">
           <h3>已选成员</h3>
-          <p class="subtle">已选择1个成员 <button class="link-button">清除所选成员</button></p>
-          <div class="selected-member"><span class="member-dot">我</span><b>我</b><button class="button ghost small">×</button></div>
+          <p class="subtle">已选择${selectedMembers.length}个成员 <button class="link-button" data-wecom-member-action="clear">清除所选成员</button></p>
+          ${selectedMembers.length ? selectedMembers.map((member) => `<div class="selected-member"><span class="member-dot">${escapeHtml(member.name.slice(0, 1))}</span><b>${escapeHtml(member.name)}</b><button class="button ghost small" data-wecom-member-remove="${escapeHtml(member.id)}">×</button></div>`).join("") : `<div class="empty">暂无已选成员</div>`}
         </div>
       </div>
     `, "确定", () => {
+      const count = window.wecomService?.saveTeamMembers() || 0;
       state.modal = null;
-      showToast("小组成员已更新");
+      showToast(`小组成员已更新：${count} 人`);
+    });
+  }
+
+if (state.modal === "wecomSidebarConfig") {
+    return modal("自定义侧边栏", `
+      <div class="wecom-compact-form">
+        <div class="form-row"><div class="label">侧边栏菜单</div><input class="input" data-wecom-sidebar-field="menus" style="width:100%" value="${escapeHtml(state.wecomSidebarMenus.join(", "))}"></div>
+        <div class="mini-card"><div class="mini-card-head">预览</div><div class="subtle">${state.wecomSidebarMenus.map((item) => escapeHtml(item)).join(" · ")}</div></div>
+        <p class="subtle">Mock 仅保存菜单配置；真实上线需要企业微信侧边栏 SDK 与登录态鉴权。</p>
+      </div>
+    `, "保存", () => {
+      const value = document.querySelector("[data-wecom-sidebar-field='menus']")?.value || "";
+      state.wecomSidebarMenus = value.split(",").map((item) => item.trim()).filter(Boolean);
+      window.wecomService?.addLog({
+        operation: "保存自定义侧边栏",
+        target: "企业微信侧边栏",
+        content: state.wecomSidebarMenus.join(", "),
+        reply: "侧边栏配置已保存",
+        detail: "Mock 侧边栏",
+      });
+      state.modal = null;
+      showToast("自定义侧边栏已保存");
     });
   }
 

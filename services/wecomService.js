@@ -11,6 +11,7 @@
       state.wecomAssistants = initial.assistants;
       state.wecomAccountGroups = initial.accountGroups;
       state.wecomContacts = initial.contacts;
+      state.wecomTeamMembers = initial.teamMembers;
       state.wecomAccounts = initial.accounts;
       state.wecomRules = initial.rules;
       state.wecomAdvancedSettings = initial.advancedSettings;
@@ -36,6 +37,12 @@
       wecomActiveAccountId: state.wecomActiveAccountId || null,
       wecomActiveRuleId: state.wecomActiveRuleId || null,
       wecomActiveGroupId: state.wecomActiveGroupId || null,
+      wecomMemberSearch: state.wecomMemberSearch || "",
+      wecomSelectedMemberIds: state.wecomSelectedMemberIds || ["member-owner"],
+      wecomSidebarMenus: state.wecomSidebarMenus || ["客户资料", "订单查询", "物流报价", "售后工单"],
+      wecomConsoleTargetType: state.wecomConsoleTargetType || "群聊",
+      wecomConsoleContactId: state.wecomConsoleContactId || state.wecomContacts?.[0]?.id || "",
+      wecomConsoleGroupId: state.wecomConsoleGroupId || state.wecomGroups?.[0]?.id || "",
       wecomLoading: state.wecomLoading || {},
       consoleStatus: state.consoleStatus || [],
     });
@@ -309,10 +316,69 @@
     return exists ? 0 : 1;
   }
 
+  function listTeamMembers() {
+    ensureState();
+    const query = String(state.wecomMemberSearch || "").trim().toLowerCase();
+    return state.wecomTeamMembers.filter((member) => !query || [member.name, member.role, member.status].join(" ").toLowerCase().includes(query));
+  }
+
+  function saveTeamMembers() {
+    const selected = state.wecomTeamMembers.filter((member) => state.wecomSelectedMemberIds.includes(member.id));
+    addLog({
+      operation: "更新小组成员",
+      target: "gs4758",
+      type: "群聊",
+      content: selected.map((member) => member.name).join(", ") || "未选择成员",
+      reply: `已保存 ${selected.length} 个成员`,
+      detail: "小组成员配置",
+    });
+    return selected.length;
+  }
+
+  function runWorkbenchAction(action) {
+    ensureState();
+    const routeMap = {
+      "营销标签": "已生成客户标签更新任务",
+      "消息群发": "已准备群发草稿，可在机器人控制台发送",
+      "自动加好友": "已创建好友通过后的欢迎语规则",
+      "自动化运营": "已生成加好友、发素材、转人工流程草稿",
+      "素材管理": "已打开常用话术与文件素材索引",
+    };
+    addLog({
+      operation: "工作台操作",
+      accountId: state.wecomAccounts[0]?.id || "",
+      target: action,
+      content: action,
+      reply: routeMap[action] || "操作已记录",
+      detail: "工作台 Mock 入口",
+    });
+    return routeMap[action] || "操作已记录";
+  }
+
   function runConsole(payload) {
     const account = getAccount(payload.accountId) || state.wecomAccounts[0];
     const target = payload.targetName || payload.targetId || "未选择目标";
     const taskId = `MOCK-${Date.now().toString().slice(-8)}`;
+    const targetGroup = payload.targetType === "群聊" ? getGroup(payload.targetId) : null;
+    if (payload.action === "创建群聊") {
+      const newId = `R:${Date.now().toString().slice(-12)}`;
+      state.wecomGroups.unshift({
+        id: newId,
+        name: payload.message || "新建客户服务群",
+        accountId: account?.id || "",
+        owner: account?.owner || "Kelvin",
+        members: 1,
+        aiEnabled: false,
+        messageEnabled: true,
+        lockName: false,
+        blockAddFriend: false,
+        lastMessage: "控制台创建群聊",
+      });
+    }
+    if (targetGroup && payload.action === "拉人进群") targetGroup.members += 1;
+    if (targetGroup && payload.action === "修改群名称" && payload.message) targetGroup.name = payload.message.slice(0, 32);
+    if (targetGroup) targetGroup.lastMessage = payload.message || payload.action;
+    state.consoleTaskId = taskId;
     state.consoleStatus = [
       `${payload.action}：指令已提交`,
       `托管账号：${account?.name || "-"}`,
@@ -386,6 +452,9 @@
     toggleGroup,
     syncGroups,
     runConsole,
+    runWorkbenchAction,
+    listTeamMembers,
+    saveTeamMembers,
     listLogs,
     exportLogs,
     addLog,

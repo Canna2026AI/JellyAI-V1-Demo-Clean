@@ -8,6 +8,12 @@
     { id: "C:1003", name: "Mia海运咨询", type: "客户", accountId: "8020" },
     { id: "C:1004", name: "售后-李", type: "内部员工", accountId: "8022" },
   ];
+  const teamMembers = [
+    { id: "member-owner", name: "我", role: "小组管理员", status: "在线", accountCount: 6 },
+    { id: "member-kelvin", name: "Kelvin", role: "客服主管", status: "在线", accountCount: 3 },
+    { id: "member-mia", name: "Mia", role: "售后成员", status: "在线", accountCount: 2 },
+    { id: "member-canna", name: "Canna", role: "销售成员", status: "离线", accountCount: 1 },
+  ];
 
   const accounts = [
     {
@@ -249,6 +255,7 @@
         assistants: clone(assistants),
         accountGroups: clone(groups),
         contacts: clone(contacts),
+        teamMembers: clone(teamMembers),
         accounts: clone(accounts),
         rules: clone(rules),
         advancedSettings: clone(advancedSettings),

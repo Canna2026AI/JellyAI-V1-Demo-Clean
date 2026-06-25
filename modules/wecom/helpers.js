@@ -30,7 +30,8 @@ function renderWechatStatusTag(status) {
 }
 
 function renderWechatSwitch(checked, type, id) {
-  return `<span class="switch ${checked ? "on" : ""}" data-wecom-switch="${type}" data-wecom-id="${escapeHtml(id)}"></span>`;
+  const action = checked ? "点击关闭" : "点击开启";
+  return `<span class="switch ${checked ? "on" : ""}" role="switch" aria-checked="${checked ? "true" : "false"}" title="${action}" data-wecom-switch="${type}" data-wecom-id="${escapeHtml(id)}"></span>`;
 }
 
 function renderWechatOption(value, label, selected) {
@@ -62,6 +63,10 @@ function renderWecomPagination(pager) {
       <button class="button small" data-wecom-page="next" ${pager.page >= pager.pageCount ? "disabled" : ""}>下一页</button>
     </div>
   </div>`;
+}
+
+function renderWecomLoadingText(active, normal, loading) {
+  return active ? loading : normal;
 }
 
 function getWechatFilteredAccounts() {

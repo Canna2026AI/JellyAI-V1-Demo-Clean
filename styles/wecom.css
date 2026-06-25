@@ -49,6 +49,7 @@
   grid-template-columns: 216px 1fr;
   min-height: calc(100vh - 52px);
   background: var(--bg);
+  min-width: 0;
 }
 
 .channel-profile-panel {
@@ -134,10 +135,12 @@
 
 .channel-manage-main {
   padding: 24px 28px;
+  min-width: 0;
 }
 
 .channel-manage-main .table-card {
   overflow-x: auto;
+  max-width: 100%;
 }
 
 .channel-manage-main table {
@@ -356,6 +359,18 @@
   box-shadow: var(--shadow);
 }
 
+.workbench-card,
+.channel-top-tabs button,
+.tree-row.child,
+.selected-member .button {
+  cursor: pointer;
+}
+
+.tree-row.child:hover,
+.selected-member:hover {
+  background: #f8fafc;
+}
+
 .workbench-card span {
   width: 36px;
   height: 36px;
@@ -419,6 +434,10 @@
   border-radius: 6px;
   padding: 0 8px;
   margin-top: 16px;
+}
+
+.selected-member + .selected-member {
+  margin-top: 8px;
 }
 
 .log-line {
