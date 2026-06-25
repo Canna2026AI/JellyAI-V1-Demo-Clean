@@ -31,10 +31,13 @@ function bindConversationEvents() {
   );
 
   bindWorkHoursEvents();
+  bindAutomationSettingsEvents();
+  bindForwardSettingsEvents();
   bindQuickMessageSettingsEvents();
   bindConversationListEvents();
   bindConversationDetailEvents();
   bindConversationInfoEvents();
+  bindConversationConfirmEvents();
 }
 
 function bindWorkHoursEvents() {
@@ -80,6 +83,12 @@ function bindWorkHoursEvents() {
   document.querySelector("[data-chat-settings-back]")?.addEventListener("click", () =>
     setState({ chatSettingsOpen: false })
   );
+  document.querySelectorAll("[data-after-hours-format]").forEach((el) =>
+    el.addEventListener("click", () => {
+      document.querySelector("[data-after-hours-text]")?.focus();
+      document.execCommand(el.dataset.afterHoursFormat, false, el.dataset.formatValue || null);
+    })
+  );
 }
 
 function syncWorkHoursFromDom() {
@@ -93,6 +102,70 @@ function syncWorkHoursFromDom() {
   workHoursSettings.schedules = schedules.length ? schedules : [{ day: "周一至周五", ranges: [{ start: "09:00", end: "18:00" }] }];
   workHoursSettings.afterHoursAction = document.querySelector("[data-after-hours-action]")?.value || workHoursSettings.afterHoursAction;
   workHoursSettings.afterHoursText = document.querySelector("[data-after-hours-text]")?.textContent.trim() || workHoursSettings.afterHoursText;
+}
+
+function bindAutomationSettingsEvents() {
+  document.querySelectorAll("[data-automation-enabled]").forEach((el) => el.addEventListener("click", () => {
+    const id = el.dataset.automationEnabled;
+    automationSettings[id].enabled = !automationSettings[id].enabled;
+    saveAutomationSettings();
+    showToast(`${getAutomationLabel(id)}已${automationSettings[id].enabled ? "开启" : "关闭"}`);
+    setState({});
+  }));
+  document.querySelectorAll("[data-automation-stop]").forEach((el) => el.addEventListener("click", () => {
+    const id = el.dataset.automationStop;
+    automationSettings[id].stopOnReply = !automationSettings[id].stopOnReply;
+    saveAutomationSettings();
+    showToast("停止回复条件已更新");
+    setState({});
+  }));
+  document.querySelectorAll("[data-automation-save]").forEach((el) => el.addEventListener("click", () => {
+    syncAutomationSettingsFromDom();
+    saveAutomationSettings();
+    showToast(`${getAutomationLabel(el.dataset.automationSave)}设置已保存`);
+    setState({});
+  }));
+}
+
+function bindForwardSettingsEvents() {
+  document.querySelector("[data-forward-enabled]")?.addEventListener("click", () => {
+    forwardSettings.enabled = !forwardSettings.enabled;
+    saveForwardSettings();
+    showToast(`消息转发已${forwardSettings.enabled ? "开启" : "关闭"}`);
+    setState({});
+  });
+  document.querySelector("[data-forward-save]")?.addEventListener("click", () => {
+    forwardSettings.channel = document.querySelector("[data-forward-channel]")?.value || forwardSettings.channel;
+    forwardSettings.scope = document.querySelector("[data-forward-scope]")?.value || forwardSettings.scope;
+    forwardSettings.webhook = document.querySelector("[data-forward-webhook]")?.value.trim() || "";
+    saveForwardSettings();
+    showToast("消息转发设置已保存");
+    setState({});
+  });
+}
+
+function syncAutomationSettingsFromDom() {
+  document.querySelectorAll("[data-auto-field]").forEach((el) => {
+    const [group, key] = el.dataset.autoField.split(".");
+    if (!automationSettings[group]) return;
+    const value = el.type === "number" || el.type === "range" ? Number(el.value) : el.value;
+    automationSettings[group][key] = Number.isNaN(value) ? el.value : value;
+  });
+  document.querySelectorAll("[data-auto-check]").forEach((el) => {
+    const [group, key] = el.dataset.autoCheck.split(".");
+    if (!automationSettings[group]) return;
+    automationSettings[group][key] = el.checked;
+  });
+}
+
+function getAutomationLabel(id) {
+  return {
+    followUp: "AI 自动跟进",
+    closingReply: "结束时 AI 自动回复",
+    media: "AI 多媒体内容发送",
+    split: "AI 长回复内容拆分",
+    summary: "自定义 AI 内容提取/总结",
+  }[id] || "自动化";
 }
 
 function bindQuickMessageSettingsEvents() {
@@ -180,6 +253,16 @@ function bindConversationDetailEvents() {
 }
 
 function bindConversationInfoEvents() {
+  document.querySelector("[data-conversation-status-button]")?.addEventListener("click", () => {
+    const conv = getSelectedConversation();
+    if (!conv) return;
+    const nextLabel = conv.status === "已解决" ? "重新打开" : "标记为已解决";
+    openConversationConfirm(nextLabel, `确认将“${conv.name}”${nextLabel}？`, "确认", () => {
+      const nextStatus = toggleConversationResolved(conv.id);
+      state.modal = null;
+      showToast(`会话已${nextStatus === "已解决" ? "标记为已解决" : "重新打开"}`);
+    });
+  });
   document.querySelector("[data-transfer-human]")?.addEventListener("click", () => {
     const conv = getSelectedConversation();
     if (!conv) return;
@@ -233,6 +316,15 @@ function bindConversationInfoEvents() {
   });
 }
 
+function bindConversationConfirmEvents() {
+  document.querySelectorAll("[data-conversation-confirm-cancel]").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
+      closeConversationConfirm();
+    })
+  );
+}
+
 function bindConversationModalEvents() {
   document.querySelectorAll("[data-custom-view-step]").forEach((el) =>
     el.addEventListener("click", () => {
@@ -271,7 +363,7 @@ function bindConversationModalEvents() {
       }
       customConversationViews.push(viewName);
       saveCustomConversationViews(customConversationViews);
-      setState({ modal: null, customViewStep: 1, customViewName: "", customViewFilterRows: 1, customViewFieldOpen: false, customViewManual: false, chatFilter: viewName, selectedConversation: null });
+      setState({ modal: null, customViewStep: 1, customViewName: "", customViewFilterRows: 1, customViewFieldOpen: false, customViewManual: false, chatSettingsOpen: false, chatFilter: viewName, selectedConversation: null, chatSearchOpen: false, chatSearchModeOpen: false, chatSearchQuery: "", chatStatusFilter: "全部状态", chatChannelFilter: "全部渠道" });
       showToast(`对话组“${viewName}”已创建`);
       return;
     }

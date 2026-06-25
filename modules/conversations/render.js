@@ -99,30 +99,30 @@ function renderAgentStatusBar(activeSettings = false) {
 function renderChatSettingsContent() {
   if (state.chatSettingsTab === "hours") return renderWorkHoursSettings();
   if (state.chatSettingsTab === "quick") return renderQuickMessageSettings();
-  if (state.chatSettingsTab === "forward") return `<section class="chat-config-card">
-    <div class="chat-config-title"><div><b>消息转发</b><p>将人工客服及 AI 助手消息转发到外部渠道</p></div><span class="switch" data-switch></span></div>
-    <div class="settings-form-grid"><label>转发渠道<select class="select"><option>企业微信群机器人</option><option>邮件</option><option>Webhook</option></select></label><label>消息范围<select class="select"><option>全部消息</option><option>仅人工消息</option><option>仅 AI 消息</option></select></label></div>
-    <label class="settings-full-field">Webhook 地址<input class="input" placeholder="https://example.com/webhook"></label>
-    <button class="button primary" data-demo-action="消息转发设置已保存">保存设置</button>
+  if (state.chatSettingsTab === "forward") return `<section class="chat-config-card" data-forward-settings>
+    <div class="chat-config-title"><div><b>消息转发</b><p>将人工客服及 AI 助手消息转发到外部渠道</p></div><span class="switch ${forwardSettings.enabled ? "on" : ""}" data-forward-enabled></span></div>
+    <div class="settings-form-grid"><label>转发渠道<select class="select" data-forward-channel>${renderSelectOptions(["企业微信群机器人", "邮件", "Webhook"], forwardSettings.channel)}</select></label><label>消息范围<select class="select" data-forward-scope>${renderSelectOptions(["全部消息", "仅人工消息", "仅 AI 消息"], forwardSettings.scope)}</select></label></div>
+    <label class="settings-full-field">Webhook 地址<input class="input" data-forward-webhook value="${escapeHtml(forwardSettings.webhook)}" placeholder="https://example.com/webhook"></label>
+    <button class="button primary" data-forward-save>保存设置</button>
   </section>`;
 
   return `<div class="chat-automation-list">
-    ${renderAutomationCard("AI 自动跟进", "在用户长时间未回复时，由 AI 自动发送跟进消息", true, `
-      <label>用户未回复时间（分钟）<input class="input" type="number" value="10"></label>
-      <label>选择指定对话分组<select class="select"><option>全部对话</option><option>人工对话</option><option>AI对话</option></select></label>
-      <label class="settings-full-field">回复内容<textarea class="textarea" placeholder="请输入自动跟进内容"></textarea></label>`)}
-    ${renderAutomationCard("结束时 AI 自动回复", "当人工结束对话后，由 AI 补充回复或进行满意度询问", false, `
-      <label>工作时间延时（分钟）<input class="input" type="number" value="10"></label>
-      <label>非工作时间延时（分钟）<input class="input" type="number" value="0"></label>
-      <label>超时会话标识<select class="select"><option>显示“超时”标识</option><option>不显示</option></select></label>`)}
-    ${renderAutomationCard("AI 多媒体内容发送", "允许 AI 回复图片、视频、文件和音频素材", true, `
-      <label><input type="checkbox" checked> 图片格式</label><label><input type="checkbox" checked> 视频格式</label><label><input type="checkbox" checked> 文件格式</label><label><input type="checkbox" checked> 音频格式</label>`)}
-    ${renderAutomationCard("AI 长回复内容拆分", "将较长回复拆分为多条消息，提升阅读体验", false, `
-      <label>最大回复内容字数<input class="input" type="number" value="300"></label><label>最大拆分回复条数<input class="input" type="number" value="3"></label>`)}
-    ${renderAutomationCard("自定义 AI 内容提取/总结", "配置对话总结提示词及触发条件", false, `
-      <label>对话分组选择<select class="select"><option>请选择</option>${customConversationViews.map((x) => `<option>${escapeHtml(x)}</option>`).join("")}</select></label>
-      <label>至少包含对话条数<input class="input" type="number" value="4"></label>
-      <label class="settings-full-field">总结提示词<textarea class="textarea" placeholder="请输入 AI 总结对话时的提示词"></textarea></label>`)}
+    ${renderAutomationCard("followUp", "AI 自动跟进", "在用户长时间未回复时，由 AI 自动发送跟进消息", automationSettings.followUp.enabled, `
+      <label>用户未回复时间（分钟）<input class="input" type="number" min="1" data-auto-field="followUp.minutes" value="${automationSettings.followUp.minutes}"></label>
+      <label>选择指定对话分组<select class="select" data-auto-field="followUp.group">${renderSelectOptions(["全部对话", "人工对话", "AI对话", ...customConversationViews], automationSettings.followUp.group)}</select></label>
+      <label class="settings-full-field">回复内容<textarea class="textarea" data-auto-field="followUp.content" placeholder="请输入自动跟进内容">${escapeHtml(automationSettings.followUp.content)}</textarea></label>`)}
+    ${renderAutomationCard("closingReply", "结束时 AI 自动回复", "当人工结束对话后，由 AI 补充回复或进行满意度询问", automationSettings.closingReply.enabled, `
+      <label>工作时间延时（分钟）<input class="input" type="number" min="0" data-auto-field="closingReply.workDelay" value="${automationSettings.closingReply.workDelay}"></label>
+      <label>非工作时间延时（分钟）<input class="input" type="number" min="0" data-auto-field="closingReply.offHoursDelay" value="${automationSettings.closingReply.offHoursDelay}"></label>
+      <label>超时会话标识<select class="select" data-auto-field="closingReply.timeoutFlag">${renderSelectOptions(["显示“超时”标识", "不显示"], automationSettings.closingReply.timeoutFlag)}</select></label>`)}
+    ${renderAutomationCard("media", "AI 多媒体内容发送", "允许 AI 回复图片、视频、文件和音频素材", automationSettings.media.enabled, `
+      <label><input type="checkbox" data-auto-check="media.image" ${automationSettings.media.image ? "checked" : ""}> 图片格式</label><label><input type="checkbox" data-auto-check="media.video" ${automationSettings.media.video ? "checked" : ""}> 视频格式</label><label><input type="checkbox" data-auto-check="media.file" ${automationSettings.media.file ? "checked" : ""}> 文件格式</label><label><input type="checkbox" data-auto-check="media.audio" ${automationSettings.media.audio ? "checked" : ""}> 音频格式</label>`)}
+    ${renderAutomationCard("split", "AI 长回复内容拆分", "将较长回复拆分为多条消息，提升阅读体验", automationSettings.split.enabled, `
+      <label>最大回复内容字数<input class="input" type="number" min="50" data-auto-field="split.maxChars" value="${automationSettings.split.maxChars}"></label><label>最大拆分回复条数<input class="input" type="number" min="1" data-auto-field="split.maxMessages" value="${automationSettings.split.maxMessages}"></label>`)}
+    ${renderAutomationCard("summary", "自定义 AI 内容提取/总结", "配置对话总结提示词及触发条件", automationSettings.summary.enabled, `
+      <label>对话分组选择<select class="select" data-auto-field="summary.group">${renderSelectOptions(["请选择", ...customConversationViews], automationSettings.summary.group)}</select></label>
+      <label>至少包含对话条数<input class="input" type="number" min="1" data-auto-field="summary.minMessages" value="${automationSettings.summary.minMessages}"></label>
+      <label class="settings-full-field">总结提示词<textarea class="textarea" data-auto-field="summary.prompt" placeholder="请输入 AI 总结对话时的提示词">${escapeHtml(automationSettings.summary.prompt)}</textarea></label>`)}
     <div class="chat-settings-tip"><b>小技巧</b><span>可通过 AI 流程或连接器，将对话总结内容同步到表格、数据库或消息渠道中。</span></div>
   </div>`;
 }
@@ -148,7 +148,7 @@ function renderWorkHoursSettings() {
   return `<section class="work-hours-page">
     <header class="work-hours-heading">
       <h2>工作时间设置</h2>
-      <p>开启后，可设置人工服务工作时间，当访客在非工作时间咨询时，按照设置的处理方式对访客进行回复 <button class="link-button" type="button">了解更多</button></p>
+      <p>开启后，可设置人工服务工作时间，当访客在非工作时间咨询时，按照设置的处理方式对访客进行回复 <button class="link-button" type="button" data-demo-action="工作时间说明">了解更多</button></p>
     </header>
 
     <div class="work-hours-toggle-row">
@@ -168,7 +168,7 @@ function renderWorkHoursSettings() {
       </select>
       <div class="after-hours-editor">
         <div class="after-hours-toolbar" aria-label="文本格式工具栏">
-          <button>H</button><button><b>B</b></button><button><i>I</i></button><button>S̶</button><span></span><button>☷</button><button>1₂</button><span></span><button>≡</button><button>☰</button><span></span><button>↗</button><button>▣</button><button>▦⌄</button><button>▧⌄</button><span></span><button class="muted">↶</button><button class="muted">↷</button>
+          <button type="button" data-after-hours-format="formatBlock" data-format-value="h3">H</button><button type="button" data-after-hours-format="bold"><b>B</b></button><button type="button" data-after-hours-format="italic"><i>I</i></button><button type="button" data-after-hours-format="strikeThrough">S̶</button><span></span><button type="button" data-after-hours-format="insertUnorderedList">☷</button><button type="button" data-after-hours-format="insertOrderedList">1₂</button><span></span><button type="button" data-after-hours-format="outdent">≡</button><button type="button" data-after-hours-format="indent">☰</button><span></span><button type="button" data-demo-action="插入链接">↗</button><button type="button" data-demo-action="插入图片">▣</button><button type="button" data-demo-action="插入表格">▦⌄</button><button type="button" data-demo-action="插入内容">▧⌄</button><span></span><button type="button" class="muted" data-after-hours-format="undo">↶</button><button type="button" class="muted" data-after-hours-format="redo">↷</button>
         </div>
         <div class="after-hours-content" contenteditable="true" data-after-hours-text>${escapeHtml(workHoursSettings.afterHoursText)}</div>
       </div>
@@ -217,12 +217,13 @@ function renderQuickReplyRow(reply) {
   return `<div class="quick-message-row"><b>${escapeHtml(reply.title)}</b><span>${escapeHtml(reply.content)}</span><button class="icon-button" data-quick-reply-delete="${reply.id}" title="删除">×</button></div>`;
 }
 
-function renderAutomationCard(title, description, enabled, fields) {
-  return `<section class="chat-config-card">
-    <div class="chat-config-title"><div><b>${title}</b><p>${description}　<a>了解更多</a></p></div><span class="switch ${enabled ? "on" : ""}" data-switch></span></div>
+function renderAutomationCard(id, title, description, enabled, fields) {
+  const settings = automationSettings[id];
+  return `<section class="chat-config-card" data-automation-card="${id}">
+    <div class="chat-config-title"><div><b>${title}</b><p>${description}　<a data-demo-action="${title}说明">了解更多</a></p></div><span class="switch ${enabled ? "on" : ""}" data-automation-enabled="${id}"></span></div>
     <div class="settings-form-grid">${fields}</div>
-    <div class="automation-controls"><label>停止回复条件 <span class="switch" data-switch></span></label><label>对话记录条数 <input type="range" min="1" max="10" value="2"> 2 条</label></div>
-    <button class="button primary" data-demo-action="${title}设置已保存">保存设置</button>
+    <div class="automation-controls"><label>停止回复条件 <span class="switch ${settings.stopOnReply ? "on" : ""}" data-automation-stop="${id}"></span></label><label>对话记录条数 <input type="range" min="1" max="10" value="${settings.historyCount}" data-auto-field="${id}.historyCount"> <span>${settings.historyCount} 条</span></label></div>
+    <button class="button primary" data-automation-save="${id}">保存设置</button>
   </section>`;
 }
 
@@ -289,7 +290,7 @@ function renderConversationDetail() {
   return `
         <div class="conv-head">
           <div><b>${escapeHtml(conv.name)} › ${escapeHtml(conv.assignee)}</b><span class="conv-head-sub">${escapeHtml(conv.channel)} · ${conv.hosted ? "托管中" : "未托管"}</span></div>
-          <button class="button primary small" data-conversation-status-button>${escapeHtml(conv.status)}</button>
+          <button class="button primary small" data-conversation-status-button title="${conv.status === "已解决" ? "重新打开会话" : "标记为已解决"}">${escapeHtml(conv.status)}</button>
         </div>
         <div class="conv-messages">
           ${getConversationMessages(conv).length ? getConversationMessages(conv).map((m) => renderConvBubble(m)).join("") : `<div class="empty" style="min-height:220px">暂无消息记录</div>`}
@@ -356,7 +357,7 @@ function getGuideCardAction(title) {
 function renderConversationInfo() {
   const conv = getSelectedConversation();
   if (!conv) return "";
-  const possibleTags = ["高意向", "待报价", "海运询价", "演示预约", "售后问题"];
+  const possibleTags = Array.from(new Set(["高意向", "待报价", "海运询价", "演示预约", "售后问题", ...conv.tags]));
   return `<div class="conv-info">
     <h3>联系人</h3>
     <div class="mini-card"><b>${escapeHtml(conv.customer.name)}</b><br><span class="subtle">${escapeHtml(conv.customer.remark)}</span><br><br><button class="button primary" style="width:100%" data-demo-action="查看联系人详情">查看/添加群成员</button></div>
