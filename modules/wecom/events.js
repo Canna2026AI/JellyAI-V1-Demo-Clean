@@ -1,54 +1,109 @@
 // Enterprise WeChat hosting page and modal events.
 
 function bindWecomEvents() {
-document.querySelectorAll("[data-wechat-tab]").forEach((el) => el.addEventListener("click", () => setState({ wechatTab: el.dataset.wechatTab })));
+  ensureWecomState();
+
+  document.querySelectorAll("[data-wechat-tab]").forEach((el) =>
+    el.addEventListener("click", () => setState({ wechatTab: el.dataset.wechatTab }))
+  );
+
   document.querySelectorAll("[data-wechat-filter]").forEach((el) => {
     const updateWechatFilter = () => {
       state[el.dataset.wechatFilter] = el.value;
+      if (["wechatAccountFilter", "wechatStatusFilter", "wechatGroupFilter", "wechatAssistantFilter"].includes(el.dataset.wechatFilter)) {
+        state.wechatAccountPage = 1;
+      }
       render();
       const next = document.querySelector(`[data-wechat-filter="${el.dataset.wechatFilter}"]`);
-      if (next && next.tagName === "INPUT") {
+      if (next && next.tagName === "INPUT" && next.type !== "date") {
         next.focus();
         next.setSelectionRange(next.value.length, next.value.length);
       }
     };
     el.addEventListener(el.tagName === "INPUT" ? "input" : "change", updateWechatFilter);
   });
+
   document.querySelectorAll("[data-wechat-reset]").forEach((el) =>
     el.addEventListener("click", () => {
       if (el.dataset.wechatReset === "logs") {
-        setState({ wechatLogQuery: "", wechatLogTarget: "", wechatLogType: "全部类型", wechatLogAccount: "全部账号" });
+        setState({
+          wechatLogQuery: "",
+          wechatLogTarget: "",
+          wechatLogType: "全部类型",
+          wechatLogAccount: "全部账号",
+          wechatLogGroup: "全部群聊",
+          wechatLogDateStart: "2026-06-13",
+          wechatLogDateEnd: "2026-06-20",
+        });
+        showToast("记录筛选已重置");
         return;
       }
-      setState({ wechatAccountFilter: "", wechatStatusFilter: "全部状态", wechatGroupFilter: "全部小组", wechatAssistantFilter: "全部助手" });
+      if (el.dataset.wechatReset === "groups") {
+        setState({ wecomGroupQuery: "" });
+        showToast("群聊筛选已重置");
+        return;
+      }
+      setState({ wechatAccountFilter: "", wechatStatusFilter: "全部状态", wechatGroupFilter: "全部小组", wechatAssistantFilter: "全部助手", wechatAccountPage: 1 });
+      showToast("账号筛选已重置");
     })
   );
+
+  document.querySelectorAll("[data-wecom-page]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const pager = window.wecomService?.listAccounts();
+      if (!pager) return;
+      state.wechatAccountPage += el.dataset.wecomPage === "next" ? 1 : -1;
+      state.wechatAccountPage = Math.min(Math.max(1, state.wechatAccountPage), pager.pageCount);
+      render();
+    })
+  );
+
   document.querySelectorAll("[data-wechat-keywords]").forEach((el) =>
     el.addEventListener("input", () => {
-      state.wecomAdvancedSettings.keywords = el.value;
+      window.wecomService?.updateAdvancedField("keywords", el.value);
     })
   );
+
+  document.querySelectorAll("[data-wecom-advanced-field]").forEach((el) =>
+    el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
+      const key = el.dataset.wecomAdvancedField;
+      const value = key === "maxDailyReplies" ? Number(el.value) || 0 : el.value;
+      window.wecomService?.updateAdvancedField(key, value);
+    })
+  );
+
+  document.querySelectorAll("[data-wecom-advanced-action]").forEach((el) =>
+    el.addEventListener("click", () => {
+      if (el.dataset.wecomAdvancedAction === "reset") {
+        window.wecomService?.resetAdvanced();
+        showToast("高级设置已恢复默认");
+        render();
+        return;
+      }
+      window.wecomService?.saveAdvanced();
+      showToast("高级设置已保存");
+      render();
+    })
+  );
+
   document.querySelectorAll("[data-wecom-switch]").forEach((el) =>
     el.addEventListener("click", () => {
       const id = el.dataset.wecomId;
       const type = el.dataset.wecomSwitch;
       if (type === "account-message" || type === "account-ai") {
-        const account = getWechatAccount(id);
-        if (account) account[type === "account-message" ? "messageEnabled" : "aiEnabled"] = !account[type === "account-message" ? "messageEnabled" : "aiEnabled"];
+        window.wecomService?.toggleAccount(id, type === "account-message" ? "messageEnabled" : "aiEnabled");
       }
       if (type === "rule-message" || type === "rule-ai") {
-        const rule = state.wecomRules.find((item) => item.id === id);
-        if (rule) rule[type === "rule-message" ? "messageEnabled" : "aiEnabled"] = !rule[type === "rule-message" ? "messageEnabled" : "aiEnabled"];
+        window.wecomService?.toggleRule(id, type === "rule-message" ? "messageEnabled" : "aiEnabled");
       }
       if (type === "group-message" || type === "group-ai" || type === "group-lock-name" || type === "group-block-friend") {
-        const group = state.wecomGroups.find((item) => item.id === id);
         const field = {
           "group-message": "messageEnabled",
           "group-ai": "aiEnabled",
           "group-lock-name": "lockName",
           "group-block-friend": "blockAddFriend",
         }[type];
-        if (group && field) group[field] = !group[field];
+        if (field) window.wecomService?.toggleGroup(id, field);
       }
       if (type === "advanced") {
         state.wecomAdvancedSettings[id] = !state.wecomAdvancedSettings[id];
@@ -57,40 +112,47 @@ document.querySelectorAll("[data-wechat-tab]").forEach((el) => el.addEventListen
       showToast("设置已更新");
     })
   );
+
   document.querySelectorAll("[data-wecom-account-action]").forEach((el) =>
     el.addEventListener("click", () => {
       const account = getWechatAccount(el.dataset.wecomId);
       if (!account) return;
       const action = el.dataset.wecomAccountAction;
+      if (action === "detail") {
+        setState({ modal: "wecomAccountDetail", wecomActiveAccountId: account.id });
+        return;
+      }
+      if (action === "edit") {
+        setState({ modal: "wecomAccountEdit", wecomActiveAccountId: account.id });
+        return;
+      }
       if (action === "delete") {
-        state.wecomAccounts = state.wecomAccounts.filter((item) => item.id !== account.id);
+        window.wecomService?.deleteAccount(account.id);
         showToast("托管账号已删除");
         render();
         return;
       }
       if (action === "restart") {
-        account.status = "初始化中";
-        account.heartbeat = "重启中";
+        state.wecomLoading.accounts = true;
+        window.wecomService?.updateAccountStatus(account.id, "初始化中");
         showToast("托管实例正在重启");
         render();
         window.setTimeout(() => {
-          account.status = "在线";
-          account.heartbeat = "刚刚";
+          state.wecomLoading.accounts = false;
+          window.wecomService?.updateAccountStatus(account.id, "在线");
           render();
           showToast("托管实例已恢复在线");
         }, 900);
         return;
       }
       if (action === "pause") {
-        account.status = account.status === "暂停" ? "在线" : "暂停";
-        account.heartbeat = account.status === "暂停" ? "已暂停" : "刚刚";
+        window.wecomService?.updateAccountStatus(account.id, account.status === "暂停" ? "在线" : "暂停");
         showToast(account.status === "暂停" ? "托管账号已暂停" : "托管账号已恢复");
       }
       if (action === "rescan") {
-        account.status = "待扫码";
+        window.wecomService?.updateAccountStatus(account.id, "待扫码");
         account.messageEnabled = false;
         account.aiEnabled = false;
-        account.heartbeat = "-";
         state.modal = "authAccount";
         state.authStep = 2;
         state.authAccountTarget = account.id;
@@ -99,17 +161,71 @@ document.querySelectorAll("[data-wechat-tab]").forEach((el) => el.addEventListen
       render();
     })
   );
+
   document.querySelectorAll("[data-wecom-rule-action]").forEach((el) =>
     el.addEventListener("click", () => {
-      const rule = state.wecomRules.find((item) => item.id === el.dataset.wecomId);
+      const action = el.dataset.wecomRuleAction;
+      if (action === "add") {
+        setState({ modal: "ruleConfig", wecomActiveRuleId: null });
+        return;
+      }
+      const rule = window.wecomService?.getRule(el.dataset.wecomId);
       if (!rule) return;
-      rule.enabled = !rule.enabled;
+      if (action === "edit") {
+        setState({ modal: "ruleConfig", wecomActiveRuleId: rule.id });
+        return;
+      }
+      if (action === "delete") {
+        window.wecomService?.deleteRule(rule.id);
+        showToast("聚合规则已删除");
+        render();
+        return;
+      }
+      window.wecomService?.toggleRule(rule.id, "enabled");
       showToast(rule.enabled ? "聚合规则已启用" : "聚合规则已停用");
       render();
     })
   );
 
-document.querySelectorAll("[data-console-action]").forEach((el) =>
+  document.querySelectorAll("[data-wecom-group-action]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const action = el.dataset.wecomGroupAction;
+      if (action === "detail") {
+        setState({ modal: "wecomGroupDetail", wecomActiveGroupId: el.dataset.wecomId });
+        return;
+      }
+      state.wecomLoading.groups = true;
+      showToast("正在同步群聊");
+      render();
+      window.setTimeout(() => {
+        state.wecomLoading.groups = false;
+        const count = window.wecomService?.syncGroups() || 0;
+        render();
+        showToast(count ? `已同步 ${count} 个新群聊` : "群聊列表已是最新");
+      }, 700);
+    })
+  );
+
+  document.querySelectorAll("[data-wecom-log-action]").forEach((el) =>
+    el.addEventListener("click", () => {
+      if (el.dataset.wecomLogAction === "search") {
+        showToast(`已查询到 ${(window.wecomService?.listLogs() || []).length} 条记录`);
+        render();
+        return;
+      }
+      state.wecomLoading.logs = true;
+      showToast("正在导出对话记录");
+      render();
+      window.setTimeout(() => {
+        state.wecomLoading.logs = false;
+        const count = window.wecomService?.exportLogs() || 0;
+        render();
+        showToast(`已模拟导出 ${count} 条记录`);
+      }, 700);
+    })
+  );
+
+  document.querySelectorAll("[data-console-action]").forEach((el) =>
     el.addEventListener("click", () => runConsoleAction(el.dataset.consoleAction))
   );
 }
@@ -119,14 +235,21 @@ function bindWecomModalEvents() {
 }
 
 function runConsoleAction(action) {
-  const target = document.getElementById("consoleTarget")?.value.trim() || "未选择目标";
+  const accountId = document.getElementById("consoleAccount")?.value || state.wecomAccounts[0]?.id || "";
+  const targetType = document.getElementById("consoleTargetType")?.value || "群聊";
+  const contactId = document.getElementById("consoleContact")?.value || "";
+  const groupId = document.getElementById("consoleGroup")?.value || "";
+  const targetId = targetType === "群聊" ? groupId : contactId;
+  const targetName = document.getElementById("consoleTarget")?.value.trim() || (targetType === "群聊" ? window.wecomService?.getGroup(groupId)?.name : state.wecomContacts?.find((contact) => contact.id === contactId)?.name) || "未选择目标";
   const message = document.getElementById("consoleMessage")?.value.trim() || "未填写消息内容";
-  state.consoleStatus = [
-    `${action}：指令已提交`,
-    `目标：${target}`,
-    action === "发送文本" ? `文本内容：${message}` : "远程实例执行中",
-    "企业微信返回成功",
-  ];
+  state.wecomLoading.console = true;
+  state.consoleStatus = [`${action}：正在提交`, `目标：${targetName}`, "等待企业微信 Mock 返回"];
+  showToast(`${action}已提交`);
   render();
-  showToast(`${action}执行成功`);
+  window.setTimeout(() => {
+    state.wecomLoading.console = false;
+    window.wecomService?.runConsole({ action, accountId, targetType, targetId, targetName, message });
+    render();
+    showToast(`${action}执行成功`);
+  }, 700);
 }

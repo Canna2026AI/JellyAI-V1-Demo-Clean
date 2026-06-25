@@ -8,24 +8,19 @@ if (state.modal === "authAccount") {
       else {
         const targetAccount = state.authAccountTarget ? getWechatAccount(state.authAccountTarget) : null;
         if (targetAccount) {
-          targetAccount.status = "在线";
+          window.wecomService?.updateAccountStatus(targetAccount.id, "在线");
           targetAccount.messageEnabled = true;
           targetAccount.aiEnabled = true;
-          targetAccount.heartbeat = "刚刚";
         } else {
-          const nextId = String(8021 + state.wecomAccounts.filter((account) => account.id.startsWith("802")).length);
-          state.wecomAccounts.unshift({
-            id: nextId,
-            name: `新托管账号${nextId}`,
+          window.wecomService?.saveAccount({
+            name: `新托管账号${Date.now().toString().slice(-4)}`,
+            alias: "扫码新增账号",
             avatar: "企",
-            accountId: `WeCom-${nextId}`,
-            instanceId: `mock-${Date.now()}`,
-            status: "在线",
+            subject: "欧诚国际物流",
             group: "gs4758",
             assistant: "canna测试",
-            messageEnabled: true,
-            aiEnabled: true,
-            heartbeat: "刚刚",
+            owner: "Kelvin",
+            remark: "通过扫码授权新增",
           });
         }
         state.authStep = 1;
@@ -33,6 +28,58 @@ if (state.modal === "authAccount") {
         state.modal = null;
         showToast("托管账号添加成功");
       }
+    });
+  }
+
+if (state.modal === "wecomAccountDetail") {
+    const account = getWechatAccount(state.wecomActiveAccountId);
+    if (!account) return "";
+    return modal("托管账号详情", `
+      <div class="wecom-detail-grid">
+        <div><span>账号名称</span><b>${escapeHtml(account.name)}</b></div>
+        <div><span>账号 ID</span><b>${escapeHtml(account.accountId)}</b></div>
+        <div><span>内部 ID</span><b>${escapeHtml(account.id)}</b></div>
+        <div><span>实例 ID</span><b>${escapeHtml(account.instanceId)}</b></div>
+        <div><span>状态</span><b>${renderWechatStatusTag(account.status)}</b></div>
+        <div><span>所属小组</span><b>${escapeHtml(account.group)}</b></div>
+        <div><span>绑定 AI 助手</span><b>${escapeHtml(account.assistant)}</b></div>
+        <div><span>消息接收</span><b>${account.messageEnabled ? "开启" : "关闭"}</b></div>
+        <div><span>AI 回复</span><b>${account.aiEnabled ? "开启" : "关闭"}</b></div>
+        <div><span>最近心跳</span><b>${escapeHtml(account.heartbeat)}</b></div>
+        <div><span>主体名称</span><b>${escapeHtml(account.subject || "-")}</b></div>
+        <div><span>负责人</span><b>${escapeHtml(account.owner || "-")}</b></div>
+      </div>
+      <div class="mini-card"><div class="mini-card-head">最近动作</div><div class="subtle">${escapeHtml(account.lastAction || "-")}</div></div>
+      <div class="mini-card"><div class="mini-card-head">备注</div><div class="subtle">${escapeHtml(account.remark || "-")}</div></div>
+    `, "确定", () => {
+      state.modal = null;
+      state.wecomActiveAccountId = null;
+      showToast("账号详情已查看");
+    });
+  }
+
+if (state.modal === "wecomAccountEdit") {
+    const account = getWechatAccount(state.wecomActiveAccountId);
+    if (!account) return "";
+    return modal("编辑托管账号", `
+      <div class="grid-2">
+        <div class="form-row"><div class="label">账号名称</div><input class="input" data-wecom-account-field="name" style="width:100%" value="${escapeHtml(account.name)}"></div>
+        <div class="form-row"><div class="label">别名</div><input class="input" data-wecom-account-field="alias" style="width:100%" value="${escapeHtml(account.alias || "")}"></div>
+        <div class="form-row"><div class="label">所属小组</div><select class="select" data-wecom-account-field="group" style="width:100%">${renderWechatGroupOptions(account.group)}</select></div>
+        <div class="form-row"><div class="label">绑定 AI 助手</div><select class="select" data-wecom-account-field="assistant" style="width:100%">${renderWechatAssistantOptions(account.assistant)}</select></div>
+        <div class="form-row"><div class="label">主体名称</div><input class="input" data-wecom-account-field="subject" style="width:100%" value="${escapeHtml(account.subject || "")}"></div>
+        <div class="form-row"><div class="label">负责人</div><input class="input" data-wecom-account-field="owner" style="width:100%" value="${escapeHtml(account.owner || "")}"></div>
+      </div>
+      <div class="form-row"><div class="label">备注</div><textarea class="textarea" data-wecom-account-field="remark" style="width:100%">${escapeHtml(account.remark || "")}</textarea></div>
+    `, "保存", () => {
+      const payload = {};
+      document.querySelectorAll("[data-wecom-account-field]").forEach((field) => {
+        payload[field.dataset.wecomAccountField] = field.value;
+      });
+      window.wecomService?.saveAccount(payload, account.id);
+      state.modal = null;
+      state.wecomActiveAccountId = null;
+      showToast("托管账号已保存");
     });
   }
 
@@ -61,22 +108,66 @@ if (state.modal === "groupMembers") {
   }
 
 if (state.modal === "ruleConfig") {
-    return modal("配置聚合规则", `
-      <div class="form-row"><div class="label">规则名称</div><input class="input" style="width:100%" value="测试"></div>
-      <div class="form-row"><div class="label">托管账号</div><select class="select" style="width:100%"><option>测试 / ID:8018</option><option>123 / ID:8019</option></select></div>
+    const rule = state.wecomActiveRuleId ? window.wecomService?.getRule(state.wecomActiveRuleId) : null;
+    const current = rule || {
+      name: "新聚合规则",
+      accountId: state.wecomAccounts[0]?.id || "",
+      replyScope: "全部",
+      keywords: "报价, 运费",
+      groupTrigger: "关键词",
+      maxReplies: 3,
+      enabled: true,
+      messageEnabled: true,
+      aiEnabled: true,
+      assistant: state.wecomAssistants?.[0] || "canna测试",
+    };
+    return modal("配置聚合规则", `<div class="wecom-compact-form">
+      <div class="form-row"><div class="label">规则名称</div><input class="input" data-wecom-rule-field="name" style="width:100%" value="${escapeHtml(current.name)}"></div>
+      <div class="form-row"><div class="label">托管账号</div><select class="select" data-wecom-rule-field="accountId" style="width:100%">${renderWechatAccountOptions(current.accountId)}</select></div>
       <div class="grid-2">
-        <div class="form-row"><div class="label">回复范围</div><select class="select" style="width:100%"><option>全部</option><option>私聊</option><option>群聊</option></select></div>
-        <div class="form-row"><div class="label">群聊触发方式</div><select class="select" style="width:100%"><option>关键词</option><option>仅@</option><option>全部消息</option></select></div>
-        <div class="form-row"><div class="label">最大 AI 回复次数</div><input class="input" style="width:100%" value="3"></div>
-        <div class="form-row"><div class="label">规则状态</div><select class="select" style="width:100%"><option>启用</option><option>停用</option></select></div>
+        <div class="form-row"><div class="label">回复范围</div><select class="select" data-wecom-rule-field="replyScope" style="width:100%">${renderSelectOptions(["全部", "私聊", "群聊"], current.replyScope)}</select></div>
+        <div class="form-row"><div class="label">群聊触发方式</div><select class="select" data-wecom-rule-field="groupTrigger" style="width:100%">${renderSelectOptions(["关键词", "仅@", "全部消息"], current.groupTrigger)}</select></div>
+        <div class="form-row"><div class="label">最大 AI 回复次数</div><input class="input" data-wecom-rule-field="maxReplies" style="width:100%" value="${escapeHtml(current.maxReplies)}"></div>
+        <div class="form-row"><div class="label">规则状态</div><select class="select" data-wecom-rule-field="enabled" style="width:100%">${renderWechatOption("true", "启用", String(current.enabled))}${renderWechatOption("false", "停用", String(current.enabled))}</select></div>
       </div>
-      <div class="form-row"><div class="label">消息接收</div><span class="switch on" data-switch></span></div>
-      <div class="form-row"><div class="label">AI 回复</div><span class="switch on" data-switch></span></div>
-      <div class="form-row"><div class="label">绑定AI助手</div><select class="select" style="width:100%"><option>canna测试</option><option>物流客服助手</option></select></div>
-    `, "确定", () => {
+      <div class="form-row"><div class="label">关键词</div><input class="input" data-wecom-rule-field="keywords" style="width:100%" value="${escapeHtml(current.keywords || "")}"></div>
+      <div class="form-row"><div class="label">消息接收</div><select class="select" data-wecom-rule-field="messageEnabled" style="width:100%">${renderWechatOption("true", "开启", String(current.messageEnabled))}${renderWechatOption("false", "关闭", String(current.messageEnabled))}</select></div>
+      <div class="form-row"><div class="label">AI 回复</div><select class="select" data-wecom-rule-field="aiEnabled" style="width:100%">${renderWechatOption("true", "开启", String(current.aiEnabled))}${renderWechatOption("false", "关闭", String(current.aiEnabled))}</select></div>
+      <div class="form-row"><div class="label">绑定AI助手</div><select class="select" data-wecom-rule-field="assistant" style="width:100%">${renderWechatAssistantOptions(current.assistant)}</select></div>
+    </div>`, "确定", () => {
+      const payload = {};
+      document.querySelectorAll("[data-wecom-rule-field]").forEach((field) => {
+        const key = field.dataset.wecomRuleField;
+        payload[key] = ["enabled", "messageEnabled", "aiEnabled"].includes(key) ? field.value === "true" : field.value;
+      });
+      window.wecomService?.saveRule(payload, rule?.id);
       state.modal = null;
+      state.wecomActiveRuleId = null;
       if (state.page === "marketing" && state.marketingSub === "accounts") state.marketingAccountTab = "rules";
       showToast("聚合规则已保存");
+    });
+  }
+
+if (state.modal === "wecomGroupDetail") {
+    const group = window.wecomService?.getGroup(state.wecomActiveGroupId);
+    if (!group) return "";
+    const account = getWechatAccount(group.accountId);
+    return modal("群聊详情", `
+      <div class="wecom-detail-grid">
+        <div><span>群名称</span><b>${escapeHtml(group.name)}</b></div>
+        <div><span>群 ID</span><b>${escapeHtml(group.id)}</b></div>
+        <div><span>托管账号</span><b>${escapeHtml(account?.name || "-")}</b></div>
+        <div><span>群主/负责人</span><b>${escapeHtml(group.owner || "-")}</b></div>
+        <div><span>成员数量</span><b>${group.members}</b></div>
+        <div><span>AI 回复</span><b>${group.aiEnabled ? "开启" : "关闭"}</b></div>
+        <div><span>消息接收</span><b>${group.messageEnabled ? "开启" : "关闭"}</b></div>
+        <div><span>禁止改群名</span><b>${group.lockName ? "开启" : "关闭"}</b></div>
+      </div>
+      <div class="mini-card"><div class="mini-card-head">最近消息</div><div class="subtle">${escapeHtml(group.lastMessage || "-")}</div></div>
+    `, "确定", () => {
+      state.modal = null;
+      state.wecomActiveGroupId = null;
+      showToast("群聊详情已查看");
     });
   }
 
