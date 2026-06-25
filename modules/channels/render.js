@@ -12,13 +12,13 @@ function renderChannels() {
           <h1 class="page-title">对话渠道</h1>
           <div class="subtle">管理您的对话渠道并发现新对话渠道以帮助您获得更多客户。</div>
         </div>
-        <button class="button small" type="button" data-channel-refresh>${view.loading ? "刷新中..." : "刷新"}</button>
+        <button class="button small" type="button" data-channel-refresh title="重新读取本地 mock 渠道数据" ${view.loading ? "disabled" : ""}>${view.loading ? "刷新中..." : "刷新"}</button>
       </div>
       <div class="channel-library-body">
         <div class="channel-category-strip">
-          ${channelCategories.map((name) => `<button class="${view.category === name ? "active" : ""}" data-channel-category="${escapeHtml(name)}">${escapeHtml(name)}</button>`).join("")}
+          ${channelCategories.map((name) => `<button class="${view.category === name ? "active" : ""}" data-channel-category="${escapeHtml(name)}" title="筛选：${escapeHtml(name)}">${escapeHtml(name)}</button>`).join("")}
         </div>
-        <input class="input channel-library-search" placeholder="搜索 对话渠道" value="${escapeHtml(view.query)}" data-channel-search />
+        <input class="input channel-library-search" placeholder="搜索 对话渠道" value="${escapeHtml(view.query)}" data-channel-search title="按渠道名称、状态、分类、账号或接入字段搜索" />
         ${view.loading ? renderChannelLoading() : renderChannelGroups(groupedChannels, view)}
       </div>
       ${renderChannelModal()}
@@ -57,11 +57,12 @@ function renderChannelLoading() {
 }
 
 function renderChannelCard(channel) {
+  const actionLabel = getChannelActionLabel(channel);
   const actionAttr = channel.route === "wechat"
     ? `data-page="wechat" data-channel-route="${escapeHtml(channel.id)}"`
     : `data-channel-primary="${escapeHtml(channel.id)}"`;
   const accountLabel = channel.accountCount > 0 ? `已连接账号：${channel.accountCount}` : "尚未连接任何账号";
-  return `<article class="channel-card" data-channel-detail="${escapeHtml(channel.id)}" tabindex="0">
+  return `<article class="channel-card" data-channel-detail="${escapeHtml(channel.id)}" tabindex="0" title="查看${escapeHtml(channel.name)}接入说明">
     <div class="channel-card-copy">
       <div class="channel-card-title-row">
         <h3>${escapeHtml(channel.name)}</h3>
@@ -70,7 +71,7 @@ function renderChannelCard(channel) {
       <p>${escapeHtml(channel.description)}</p>
       <div class="channel-card-meta">
         <span>${escapeHtml(accountLabel)}</span>
-        <button class="button small" type="button" ${actionAttr}>${escapeHtml(channel.action)}</button>
+        <button class="button small" type="button" ${actionAttr} title="${escapeHtml(actionLabel)}">${escapeHtml(actionLabel)}</button>
       </div>
     </div>
     ${iconBox(channel.icon, `channel-icon ${getChannelIconClass(channel.category, channel.status)}`)}
@@ -79,7 +80,7 @@ function renderChannelCard(channel) {
 
 function renderChannelStatus(status) {
   const cls = status === "已接入" ? "connected" : status === "开发中" ? "developing" : "pending";
-  return `<span class="channel-status ${cls}">${escapeHtml(status)}</span>`;
+  return `<span class="channel-status ${cls}" title="${escapeHtml(getChannelStatusTitle(status))}">${escapeHtml(status)}</span>`;
 }
 
 function getChannelIconClass(category, status) {

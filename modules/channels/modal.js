@@ -16,7 +16,7 @@ function renderChannelModal() {
         ${view.modalMode === "connect" ? renderChannelConnectForm(channel) : renderChannelDetail(channel)}
       </div>
       <div class="modal-foot">
-        <button class="button" type="button" data-channel-close>取消</button>
+        <button class="button" type="button" data-channel-close>${view.modalMode === "connect" ? "取消" : "关闭"}</button>
         ${renderChannelModalPrimary(channel, view.modalMode)}
       </div>
     </div>
@@ -52,7 +52,7 @@ function renderChannelDetail(channel) {
     </div>
     <div class="channel-detail-section">
       <h3>已连接账号</h3>
-      ${channel.accounts.length ? `<ul class="channel-account-list">${channel.accounts.map((account) => `<li>${escapeHtml(account)}</li>`).join("")}</ul>` : `<p class="subtle">当前暂无已连接账号。</p>`}
+      ${channel.accounts.length ? `<ul class="channel-account-list">${channel.accounts.map((account) => `<li><span>${escapeHtml(account)}</span>${account === channel.mockAccountName ? `<button class="link-button" type="button" data-channel-remove="${escapeHtml(channel.id)}">移除</button>` : ""}</li>`).join("")}</ul>` : `<p class="subtle">当前暂无已连接账号。</p>`}
     </div>
   </div>`;
 }
@@ -82,6 +82,10 @@ function renderChannelConnectForm(channel) {
       <span>备注</span>
       <textarea class="input" name="remark" placeholder="记录接入用途或测试说明">${escapeHtml(values.remark)}</textarea>
     </label>
+    <div class="channel-test-row">
+      <button class="button small" type="button" data-channel-test="${escapeHtml(channel.id)}">测试连接</button>
+      <span>仅模拟校验账号名称和配置完整度</span>
+    </div>
     <div class="channel-required-fields">
       <span>后续真实接入字段</span>
       <div>${channel.fields.map((field) => `<em>${escapeHtml(field)}</em>`).join("")}</div>

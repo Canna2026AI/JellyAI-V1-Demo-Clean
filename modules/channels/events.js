@@ -17,6 +17,7 @@ function bindChannelEvents() {
 
   const channelRefresh = document.querySelector("[data-channel-refresh]");
   if (channelRefresh) channelRefresh.addEventListener("click", () => {
+    if (state.channelLoading) return;
     setState({ channelLoading: true, channelActiveId: null });
     window.setTimeout(() => {
       state.channelLoading = false;
@@ -70,6 +71,14 @@ function bindChannelEvents() {
   document.querySelectorAll("[data-channel-save]").forEach((el) =>
     el.addEventListener("click", () => saveChannelMockConfig(el.dataset.channelSave))
   );
+
+  document.querySelectorAll("[data-channel-test]").forEach((el) =>
+    el.addEventListener("click", () => testChannelMockConfig(el.dataset.channelTest))
+  );
+
+  document.querySelectorAll("[data-channel-remove]").forEach((el) =>
+    el.addEventListener("click", () => removeChannelMockConfig(el.dataset.channelRemove))
+  );
 }
 
 function openChannelDetail(channelId) {
@@ -109,4 +118,25 @@ function saveChannelMockConfig(channelId) {
   };
   setState({ channelActiveId: null, channelModalMode: "detail" });
   showToast(`${channel.name}配置已保存（Mock）`);
+}
+
+function testChannelMockConfig(channelId) {
+  const channel = findChannelById(channelId);
+  const form = document.querySelector("[data-channel-form]");
+  if (!channel || !form) return;
+  const data = new FormData(form);
+  const accountName = String(data.get("accountName") || "").trim();
+  if (!accountName) {
+    showToast("请先填写账号名称");
+    return;
+  }
+  showToast(`${channel.name}连接测试通过（Mock）`);
+}
+
+function removeChannelMockConfig(channelId) {
+  const channel = findChannelById(channelId);
+  if (!state.channelMockForms?.[channelId]) return;
+  delete state.channelMockForms[channelId];
+  setState({ channelActiveId: channelId, channelModalMode: "detail" });
+  showToast(`${channel?.name || "渠道"}Mock账号已移除`);
 }
