@@ -1,0 +1,424 @@
+/* Enterprise WeCom hosting styles. */
+
+.wechat-page {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 0;
+  background: #fff;
+  min-height: calc(100vh - 52px);
+}
+
+.wechat-main {
+  padding: 22px 24px;
+  background: var(--bg);
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.metric {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.metric-value {
+  font-size: 26px;
+  font-weight: 780;
+  margin: 6px 0;
+}
+
+.console-grid {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  gap: 18px;
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.channel-manage-page {
+  display: grid;
+  grid-template-columns: 216px 1fr;
+  min-height: calc(100vh - 52px);
+  background: var(--bg);
+}
+
+.channel-profile-panel {
+  background: #fff;
+  border-right: 1px solid var(--line);
+  padding: 22px 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+.channel-profile {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding-bottom: 18px;
+}
+
+.channel-profile h3 {
+  font-size: 15px;
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+
+.channel-profile p {
+  color: #667085;
+  font-size: 12px;
+}
+
+.channel-mini-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+
+.channel-mini-icon.orange {
+  background: #ff6b1a;
+}
+
+.channel-tabs {
+  display: grid;
+  gap: 4px;
+}
+
+.channel-tab {
+  height: 34px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #4b5563;
+  text-align: left;
+  padding: 0 10px;
+}
+
+.channel-tab.active {
+  color: var(--blue);
+  background: #e8f0ff;
+  font-weight: 700;
+}
+
+.channel-help {
+  margin-top: auto;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.channel-help a,
+.back-link,
+.link-button {
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  padding: 0;
+  font: inherit;
+}
+
+.channel-manage-main {
+  padding: 24px 28px;
+}
+
+.channel-manage-main .table-card {
+  overflow-x: auto;
+}
+
+.channel-manage-main table {
+  min-width: 920px;
+}
+
+.channel-manage-main table.compact-table {
+  min-width: 680px;
+}
+
+.back-link {
+  margin-bottom: 14px;
+}
+
+.channel-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.channel-top-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+.channel-top-tabs button {
+  height: 34px;
+  border: 0;
+  background: transparent;
+  padding: 0 12px;
+  color: #4b5563;
+  border-bottom: 2px solid transparent;
+}
+
+.channel-top-tabs .active-blue {
+  color: var(--blue);
+  border-color: var(--blue);
+  font-weight: 700;
+}
+
+.group-hero {
+  height: 92px;
+  border-radius: 6px;
+  background: linear-gradient(105deg, #3c13a7, #5525c9 65%, #421ba8);
+  color: #fff;
+  display: grid;
+  grid-template-columns: 1fr 96px 150px auto;
+  align-items: center;
+  gap: 22px;
+  padding: 0 24px;
+  margin-bottom: 16px;
+}
+
+.group-hero-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.group-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.16);
+  font-weight: 800;
+}
+
+.group-hero h2 {
+  font-size: 24px;
+}
+
+.group-hero p,
+.group-stat span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+}
+
+.group-stat b {
+  display: block;
+  font-size: 32px;
+}
+
+.member-toolbar {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wechat-status-grid {
+  margin: 16px 0;
+}
+
+.wechat-filter-bar {
+  justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.wechat-filter-bar .input,
+.wechat-filter-bar .select {
+  min-width: 170px;
+}
+
+.wechat-account-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 210px;
+}
+
+.action-cell {
+  min-width: 270px;
+}
+
+.action-cell .button {
+  margin: 2px;
+}
+
+.member-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  background: #eef2f7;
+  color: #475467;
+  margin-right: 8px;
+  font-weight: 700;
+}
+
+.channel-table-gap {
+  margin-top: 16px;
+}
+
+.settings-list {
+  display: grid;
+  gap: 12px;
+}
+
+.setting-row {
+  min-height: 58px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.setting-row.vertical {
+  min-height: 94px;
+  align-items: stretch;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+}
+
+.select-line {
+  height: 36px;
+  border: 1px solid var(--line-dark);
+  border-radius: 6px;
+  color: #667085;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+}
+
+.workbench-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.workbench-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  min-height: 132px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.workbench-card:hover {
+  border-color: #b8c4d6;
+  box-shadow: var(--shadow);
+}
+
+.workbench-card span {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #111827;
+  color: #fff;
+  font-size: 12px;
+}
+
+.workbench-card p {
+  color: #667085;
+  line-height: 1.6;
+}
+
+.member-modal-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 340px;
+  margin: -20px;
+}
+
+.member-picker,
+.member-picked {
+  padding: 20px;
+}
+
+.member-picker {
+  border-right: 1px solid var(--line);
+}
+
+.member-picker h3,
+.member-picked h3 {
+  margin-bottom: 12px;
+}
+
+.member-tree {
+  margin-top: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.tree-row {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tree-row.child {
+  padding-left: 24px;
+}
+
+.selected-member {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 8px;
+  margin-top: 16px;
+}
+
+.log-line {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+

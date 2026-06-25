@@ -1,0 +1,57 @@
+/* Base reset, tokens, and primitives. */
+
+:root {
+  --nav: #101828;
+  --nav-2: #182238;
+  --top: #0c1426;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --line: #e5eaf3;
+  --line-dark: #d6deea;
+  --text: #1f2937;
+  --muted: #667085;
+  --soft: #f2f5fa;
+  --blue: #3478f6;
+  --blue-2: #eaf2ff;
+  --green: #19b981;
+  --orange: #ff8a3d;
+  --red: #ee554f;
+  --purple: #6f42c1;
+  --shadow: 0 10px 30px rgba(16, 24, 40, 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  background: var(--bg);
+  font-size: 14px;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+  transition: grid-template-columns .2s ease;
+}
+
+.app-shell.nav-collapsed {
+  grid-template-columns: 64px 1fr;
+}
+
