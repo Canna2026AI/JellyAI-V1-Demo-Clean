@@ -1,0 +1,14 @@
+{
+  "name": "jellyai-v1-demo-clean",
+  "version": "1.0.0",
+  "private": true,
+  "description": "JellyAI V1 demo with a local usable agents backend.",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js",
+    "check:js": "find . -path './.git' -prune -o -path './node_modules' -prune -o -name '*.js' -print0 | xargs -0 -n1 node --check"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -104,7 +104,7 @@ function renderKnowledgeCard(kb) {
     <div class="knowledge-card-footer">
       <span class="tag green">${kb.type}</span>
       <div>
-        <button class="button ghost small" data-modal="deleteKnowledge">删除</button>
+        <button class="button ghost small" data-agent-delete-knowledge="${kb.id}">删除</button>
         <button class="button small" data-page="knowledgeCreate">配置</button>
       </div>
     </div>

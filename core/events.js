@@ -83,8 +83,13 @@ document.querySelectorAll("[data-close-modal]").forEach((el) => el.addEventListe
 document.querySelectorAll("[data-close-drawer]").forEach((el) => el.addEventListener("click", () => setState({ drawer: null })));
 const modalOk = document.querySelector("[data-modal-ok]");
   if (modalOk) modalOk.addEventListener("click", () => {
-    if (window.__modalOk) window.__modalOk();
-    render();
+    if (!window.__modalOk) {
+      render();
+      return;
+    }
+    const result = window.__modalOk();
+    if (result && typeof result.then === "function") result.finally(render);
+    else render();
   });
   document.querySelectorAll("[data-switch]").forEach((el) => el.addEventListener("click", () => el.classList.toggle("on")));
 }

@@ -18,6 +18,7 @@ function bindAgentSearchInput(selector, stateKey, options = {}) {
 
 function bindAgentEvents() {
   ensureAgentState();
+  syncAgentDataFromBackend();
   bindAgentSearchInput("[data-agent-search]", "agentSearchQuery");
   bindAgentSearchInput("[data-agent-knowledge-search]", "agentKnowledgeSearchQuery");
   bindAgentSearchInput("[data-skill-search]", "skillSearchQuery");
@@ -31,7 +32,7 @@ function bindAgentEvents() {
   document.querySelectorAll("[data-agent-status-toggle]").forEach((el) =>
     el.addEventListener("click", (event) => {
       event.stopPropagation();
-      toggleAgentStatus(el.dataset.agentStatusToggle);
+      void toggleAgentStatus(el.dataset.agentStatusToggle);
     })
   );
   document.querySelectorAll("[data-assistant-sub]").forEach((el) =>
@@ -54,26 +55,29 @@ function bindAgentEvents() {
     })
   );
   const saveSettings = document.querySelector("[data-agent-save-settings]");
-  if (saveSettings) saveSettings.addEventListener("click", saveAgentSettings);
+  if (saveSettings) saveSettings.addEventListener("click", () => void saveAgentSettings());
   document.querySelectorAll("[data-agent-remove-knowledge]").forEach((el) =>
     el.addEventListener("click", () => {
       const agent = getSelectedAgent();
-      setAgentRelation(agent, "knowledgeBaseIds", agent.knowledgeBaseIds.filter((id) => id !== el.dataset.agentRemoveKnowledge));
-      showToast("知识库已移除");
+      void setAgentRelation(agent, "knowledgeBaseIds", agent.knowledgeBaseIds.filter((id) => id !== el.dataset.agentRemoveKnowledge), "知识库已移除");
     })
   );
   document.querySelectorAll("[data-agent-remove-skill]").forEach((el) =>
     el.addEventListener("click", () => {
       const agent = getSelectedAgent();
-      setAgentRelation(agent, "skillIds", agent.skillIds.filter((id) => id !== el.dataset.agentRemoveSkill));
-      showToast("技能已移除");
+      void setAgentRelation(agent, "skillIds", agent.skillIds.filter((id) => id !== el.dataset.agentRemoveSkill), "技能已移除");
     })
   );
   document.querySelectorAll("[data-agent-remove-tool]").forEach((el) =>
     el.addEventListener("click", () => {
       const agent = getSelectedAgent();
-      setAgentRelation(agent, "toolIds", agent.toolIds.filter((id) => id !== el.dataset.agentRemoveTool));
-      showToast("工具已移除");
+      void setAgentRelation(agent, "toolIds", agent.toolIds.filter((id) => id !== el.dataset.agentRemoveTool), "工具已移除");
+    })
+  );
+  document.querySelectorAll("[data-agent-delete-knowledge]").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setState({ modal: "deleteKnowledge", selectedKnowledgeBaseId: el.dataset.agentDeleteKnowledge });
     })
   );
   document.querySelectorAll("[data-detail-action]").forEach((el) =>
@@ -103,7 +107,7 @@ document.querySelectorAll("[data-skill-filter]").forEach((el) =>
   );
   const skillSave = document.querySelector("[data-skill-save]");
   if (skillSave) skillSave.addEventListener("click", () => {
-    saveSkillFromEditor();
+    void saveSkillFromEditor();
   });
   document.querySelectorAll("[data-ai-tool-filter]").forEach((el) =>
     el.addEventListener("click", () => setState({ aiToolFilter: el.dataset.aiToolFilter }))
@@ -178,15 +182,34 @@ function bindAgentModalEvents() {
   );
 }
 
-function sendAssistantMessage() {
+async function sendAssistantMessage() {
   const agent = getSelectedAgent();
   const input = document.getElementById("assistantInput");
   const text = input.value.trim();
   if (!text || !agent || state.agentChatLoading) return;
-  agent.messages.push({ role: "user", text });
+  const localUserMessage = { role: "user", text };
+  agent.messages.push(localUserMessage);
   input.value = "";
   state.agentChatLoading = true;
   render();
+  const api = getAgentApi();
+  try {
+    if (api) {
+      const result = await api.sendChat(agent.id, text);
+      agent.messages = result.messages || [...agent.messages, result.assistantMessage];
+      state.agentChatLoading = false;
+      render();
+      return;
+    }
+  } catch (error) {
+    if (state.agentBackendLoaded) {
+      state.agentChatLoading = false;
+      handleAgentApiError(error, "聊天预览失败");
+      render();
+      return;
+    }
+    handleAgentApiError(error, "后端未连接，已返回页面内模拟回复");
+  }
   window.setTimeout(() => {
     const reply = generateAgentReply(agent, text);
     agent.messages.push({ role: "assistant", text: reply.text, meta: reply.meta });

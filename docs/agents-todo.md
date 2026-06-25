@@ -1,84 +1,138 @@
-# AI Agents Backend TODO
+# AI Agents Backend
 
-当前 AI 智能体模块只使用前端 mock 数据与本地 mock service 辅助函数，不连接真实后端。
+AI 智能体模块当前已经接入本地 Node 后端，可用于真实 Demo 验收。
+
+## 当前已实现
+
+- 本地 Node HTTP 服务：`server/server.js`
+- 静态页面服务：访问 `/` 直接打开现有 Demo
+- JSON 持久化数据库：`server/data/agents-db.json`
+- 数据库首次启动自动从 `data/agents.js`、`data/knowledge.js` 生成种子数据
+- 前端服务层：`services/agentsService.js`
+- 智能体列表、创建、详情、编辑、启用、停用、删除
+- 知识库绑定和解除
+- 技能创建、编辑、删除、导入和解除
+- 工具创建、选择和解除
+- 模型配置保存
+- 聊天预览 API，返回模拟 AI 回复、命中信息、token 和费用
+- 审计日志：创建、更新、删除、绑定关系等操作都会写入 `auditLogs`
+- 本地权限结构：默认 demo 用户 `Kelvin` 拥有 `admin` 角色
+
+## 运行方式
+
+```bash
+npm start
+```
+
+默认地址：
+
+```text
+http://localhost:3000
+```
+
+指定端口：
+
+```bash
+PORT=3127 npm start
+```
 
 ## API 清单
 
+- `GET /api/health`：检查服务、数据库路径和当前 demo 用户。
+- `GET /api/agents/bootstrap`：一次性获取智能体、知识库、技能、工具、模型、集成配置。
 - `GET /api/agents`：获取智能体列表，支持 `keyword`、`status` 查询。
-- `POST /api/agents`：创建智能体，提交名称、描述、模型、开场白、基础提示词。
-- `GET /api/agents/:id`：获取智能体详情，包括知识库、技能、工具、意图、集成、成员和模型配置。
-- `PATCH /api/agents/:id`：更新智能体名称、描述、状态、提示词、开场白等基础配置。
-- `DELETE /api/agents/:id`：删除智能体。
-- `POST /api/agents/:id/chat`：提交预览消息并返回模拟或真实 AI 回复。
-- `POST /api/agents/:id/knowledge-bases`：绑定一个或多个知识库。
+- `POST /api/agents`：创建智能体。
+- `GET /api/agents/:id`：获取智能体详情。
+- `PATCH /api/agents/:id`：更新智能体基础字段和状态。
+- `DELETE /api/agents/:id`：软删除智能体。
+- `POST /api/agents/:id/chat`：提交预览消息并返回模拟 AI 回复。
+- `POST /api/agents/:id/knowledge-bases`：保存知识库绑定，支持 `ids`。
 - `DELETE /api/agents/:id/knowledge-bases/:knowledgeBaseId`：解除知识库绑定。
-- `POST /api/agents/:id/skills`：导入或绑定一个或多个技能。
+- `POST /api/agents/:id/skills`：保存技能绑定，支持 `ids`。
 - `DELETE /api/agents/:id/skills/:skillId`：解除技能绑定。
-- `POST /api/agents/:id/tools`：选择或绑定一个或多个工具。
+- `POST /api/agents/:id/tools`：保存工具绑定，支持 `ids`。
 - `DELETE /api/agents/:id/tools/:toolId`：解除工具绑定。
 - `PATCH /api/agents/:id/model-config`：保存模型、上下文条数、token 展示、提示词和开场白。
+- `GET /api/knowledge-bases`：获取知识库列表。
+- `DELETE /api/knowledge-bases/:id`：删除知识库并清理智能体绑定。
+- `GET /api/skills`：获取技能列表。
+- `POST /api/skills`：创建技能。
+- `PATCH /api/skills/:id`：更新技能。
+- `DELETE /api/skills/:id`：删除技能并清理智能体绑定。
+- `GET /api/tools`：获取工具列表和智能体可选工具。
+- `POST /api/tools`：创建自定义工具。
 
-## 后续接入点
+## 本地数据库结构
 
-- 增加服务层文件，将当前 mock helper 替换为真实请求封装。
-- 为列表、详情、创建、保存和删除增加真实 loading、错误重试和权限错误提示。
-- 聊天预览需要返回命中的知识库、技能执行、工具调用、token 消耗和费用明细。
-- 知识库、技能、工具选择需要校验当前团队权限和授权状态。
-- 删除智能体前需要后端校验是否被渠道规则或企业微信托管规则引用。
+- `teams`：团队。
+- `users`：demo 用户和角色。
+- `models`：可选模型列表。
+- `integrations`：可选渠道集成。
+- `agents`：智能体主数据，包含模型配置、绑定关系、成员、意图和预览消息。
+- `knowledgeBases`：知识库。
+- `skills`：技能。
+- `tools`：工具市场列表。
+- `toolOptions`：智能体详情页可选择的工具。
+- `chatRuns`：聊天预览运行记录。
+- `auditLogs`：后台操作审计。
 
-## 数据库设计建议
+## 生产后端 TODO
 
-- `agents`：智能体主表，字段包括 `id`、`team_id`、`name`、`description`、`status`、`model`、`prompt`、`opening_message`、`context_limit`、`show_token_usage`、`created_by`、`created_at`、`updated_at`、`deleted_at`。
-- `agent_knowledge_bases`：智能体与知识库绑定关系，字段包括 `agent_id`、`knowledge_base_id`、`enabled`、`priority`、`created_at`。
-- `agent_skills`：智能体与技能绑定关系，字段包括 `agent_id`、`skill_id`、`enabled`、`config_json`、`created_at`。
-- `agent_tools`：智能体与工具绑定关系，字段包括 `agent_id`、`tool_id`、`enabled`、`auth_account_id`、`config_json`、`created_at`。
-- `agent_intents`：智能体意图配置，字段包括 `id`、`agent_id`、`name`、`match_type`、`examples_json`、`action_type`、`action_config_json`、`enabled`。
-- `agent_integrations`：渠道集成配置，字段包括 `agent_id`、`channel_type`、`external_rule_id`、`enabled`、`config_json`。
-- `agent_members`：成员可见和协作权限，字段包括 `agent_id`、`member_id`、`role`、`created_at`。
-- `agent_chat_runs`：预览和真实会话执行记录，字段包括 `id`、`agent_id`、`conversation_id`、`input`、`output`、`knowledge_hits_json`、`tool_calls_json`、`token_usage_json`、`cost`、`status`、`created_at`。
+### API
 
-## 服务器与任务
+- 将本地 JSON API 迁移为正式 REST 或 RPC 服务。
+- 增加分页、排序、批量操作、字段级校验和乐观锁版本号。
+- 聊天预览返回流式结果，前端可展示检索、工具调用和模型生成阶段。
+- 删除智能体前校验企业微信托管规则、渠道规则、流程节点是否引用。
 
-- API 服务需要按 `team_id` 做数据隔离，并统一校验当前登录用户是否属于团队。
-- 保存模型配置、知识库绑定、技能绑定和工具绑定时需要写审计日志。
-- 删除智能体建议采用软删除，避免历史会话和渠道规则失去引用。
-- 聊天预览应走异步执行管线：模型请求、知识检索、技能判断、工具调用、结果汇总。
-- 长耗时工具调用需要任务队列，前端通过 run id 轮询或 SSE/WebSocket 获取状态。
+### 数据库
 
-## Webhook
+- 使用 PostgreSQL 或 MySQL 替代 JSON 文件。
+- 建议表：`agents`、`agent_knowledge_bases`、`agent_skills`、`agent_tools`、`agent_intents`、`agent_integrations`、`agent_members`、`agent_chat_runs`、`agent_audit_logs`。
+- 智能体删除继续使用软删除，避免历史会话失去引用。
+- 对团队、成员、渠道、授权账号建立外键或一致性校验。
 
-- 工具执行需要支持出站 Webhook，包含签名、重试、超时、失败告警。
-- 渠道集成需要支持入站 Webhook，例如企业微信、微信公众号、小红书、抖音私信等消息事件。
-- Webhook 日志需要记录请求头、脱敏后的请求体、响应状态、耗时和错误原因。
+### 服务器
 
-## 第三方 SDK
+- API 按 `team_id` 做数据隔离。
+- 增加统一错误码、请求 ID、结构化日志和慢请求记录。
+- 长耗时工具调用进入任务队列，前端用 run id 轮询或 SSE/WebSocket 订阅。
+- 模型请求、知识检索、技能判断、工具调用需要独立执行管线。
 
-- LLM SDK：接入豆包、通义千问、OpenAI 或其他模型供应商，统一封装模型选择、超时、重试和费用统计。
-- 企业微信 SDK：用于加好友、群消息、私聊消息、群聊创建、成员同步。
-- 搜索/工具 SDK：用于 Bing 搜索、Webhook、OCR、文档解析等工具能力。
-- 文件解析 SDK：用于知识库导入时解析 xlsx、pdf、docx、txt、html。
+### Webhook
 
-## 对象存储
+- 出站 Webhook：工具调用、签名、超时、重试、失败告警。
+- 入站 Webhook：企业微信、微信公众号、小红书、抖音私信等消息事件。
+- Webhook 日志保存请求头、脱敏请求体、响应状态、耗时和错误原因。
 
-- 知识库原始文件、导入模板、聊天附件和工具执行产物需要放入对象存储。
-- 文件表需要保存对象 key、文件 hash、大小、mime type、上传者、团队和生命周期策略。
-- 下载链接使用短期签名 URL，避免公开暴露私有知识文件。
+### 第三方 SDK
 
-## Redis 与缓存
+- LLM SDK：豆包、通义千问、OpenAI 等统一模型适配、超时、重试和费用统计。
+- 企业微信 SDK：加好友、群消息、私聊消息、群聊创建、成员同步。
+- 搜索和工具 SDK：Bing 搜索、Webhook、OCR、文档解析。
+- 文件解析 SDK：xlsx、pdf、docx、txt、html 知识库导入。
 
-- Redis 保存聊天预览短期上下文、工具执行锁、幂等 key、异步任务状态。
-- 模型列表、工具目录、团队权限摘要可做短期缓存。
-- Webhook 重试队列和限流计数可使用 Redis 实现。
+### 对象存储
 
-## 权限
+- 知识库原始文件、聊天附件、导入模板和工具执行产物放入对象存储。
+- 文件表保存对象 key、hash、大小、mime type、上传者、团队和生命周期策略。
+- 私有文件使用短期签名 URL 下载。
 
-- 权限粒度建议包括：查看智能体、创建智能体、编辑智能体、删除智能体、管理知识库绑定、管理技能、管理工具、查看执行日志。
-- 成员 Tab 中的成员范围需要映射到后端 RBAC 或团队角色。
-- 删除、停用、修改集成渠道前需要校验是否影响线上规则。
+### Redis
 
-## 登录与安全
+- 保存聊天短期上下文、工具执行锁、幂等 key、异步任务状态。
+- 缓存模型列表、工具目录、团队权限摘要。
+- Webhook 重试队列、限流计数和任务去重可使用 Redis。
+
+### 权限
+
+- 权限粒度：查看智能体、创建智能体、编辑智能体、删除智能体、管理知识库绑定、管理技能、管理工具、查看执行日志。
+- 成员 Tab 需要映射到后端 RBAC 或团队角色。
+- 删除、停用、修改集成渠道前，需要校验是否影响线上规则。
+
+### 登录与安全
 
 - 所有 API 需要登录态，建议使用 HttpOnly session cookie 或短期 access token。
-- 敏感配置如 API Key、Webhook Secret、第三方授权 token 必须加密存储。
-- 聊天日志、联系人信息、手机号、微信号等需要脱敏展示和权限控制。
-- 管理端操作需要审计，包括操作者、IP、UA、操作前后差异。
+- API Key、Webhook Secret、第三方授权 token 必须加密存储。
+- 聊天日志、联系人信息、手机号、微信号需要脱敏展示和权限控制。
+- 管理端操作需要审计操作者、IP、UA、操作前后差异。

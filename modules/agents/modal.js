@@ -15,7 +15,7 @@ if (state.modal === "createAssistant") {
 if (state.modal === "deleteAssistant") {
     const agent = getSelectedAgent();
     return modal("删除智能体", `
-      <div class="danger-modal-text">确认删除「${escapeHtml(agent?.name || "当前智能体")}」吗？删除后，它绑定的知识库、技能、工具和聊天预览记录会从当前 mock 数据中移除。</div>
+      <div class="danger-modal-text">确认删除「${escapeHtml(agent?.name || "当前智能体")}」吗？删除后，它绑定的知识库、技能、工具和聊天预览记录会从当前数据中移除。</div>
     `, "确认删除", deleteSelectedAgent);
   }
 
@@ -54,14 +54,14 @@ if (state.modal === "associateKnowledge") {
       state.agentModalSelection = [...(agent?.knowledgeBaseIds || [])];
     }
     const selected = new Set(state.agentModalSelection);
-    window.__modalOk = () => {
+    window.__modalOk = async () => {
       if (!agent) return;
-      agent.knowledgeBaseIds = Array.from(selected);
+      const ids = Array.from(selected);
       state.modal = null;
       state.agentModalSelection = [];
       state.agentModalAgentId = null;
       state.agentKnowledgeSearchQuery = "";
-      showToast("知识库绑定已保存");
+      await setAgentRelation(agent, "knowledgeBaseIds", ids, "知识库绑定已保存");
     };
     return modal("关联知识库", `
       <div class="knowledge-pick-list">
@@ -80,23 +80,15 @@ if (state.modal === "associateKnowledge") {
 
 if (state.modal === "deleteSkill") {
     return modal("删除技能", `
-      <div class="danger-modal-text">删除后，所有引用该技能的智能体配置将失效。当前为模拟数据，确认后会返回技能列表。</div>
-    `, "确认删除", () => {
-      state.modal = null;
-      state.page = "ai";
-      state.assistantSub = "skill";
-      state.selectedSkillId = null;
-      showToast("技能已删除");
-    });
+      <div class="danger-modal-text">删除后，所有引用该技能的智能体配置将同步移除。</div>
+    `, "确认删除", deleteSelectedSkill);
   }
 
 if (state.modal === "deleteKnowledge") {
+    const knowledgeBase = knowledgeBases.find((item) => item.id === state.selectedKnowledgeBaseId);
     return modal("删除知识库", `
-      <div class="danger-modal-text">删除知识库后，关联该知识库的智能体将无法继续检索其中内容。当前为模拟数据，不会真的删除文件。</div>
-    `, "确认删除", () => {
-      state.modal = null;
-      showToast("知识库已删除");
-    });
+      <div class="danger-modal-text">确认删除「${escapeHtml(knowledgeBase?.name || "当前知识库")}」吗？删除后，关联该知识库的智能体将无法继续检索其中内容。</div>
+    `, "确认删除", deleteSelectedKnowledgeBase);
   }
 
 if (state.modal === "createCustomTool") {
@@ -117,13 +109,13 @@ if (state.modal === "assistantToolPicker") {
       state.agentToolModalAgentId = agent?.id;
       state.agentToolSelection = [...(agent?.toolIds || [])];
     }
-    window.__modalOk = () => {
-      if (agent) agent.toolIds = [...state.agentToolSelection];
+    window.__modalOk = async () => {
+      const ids = [...state.agentToolSelection];
       state.modal = null;
       state.agentToolSelection = [];
       state.agentToolModalAgentId = null;
       state.agentToolPickerSearchQuery = "";
-      showToast("工具选择已保存");
+      if (agent) await setAgentRelation(agent, "toolIds", ids, "工具选择已保存");
     };
     return `<div class="modal-backdrop"><div class="modal assistant-tool-modal">
       <div class="modal-head">添加工具<button class="button ghost" data-close-modal>×</button></div>
@@ -167,15 +159,15 @@ function renderImportSkillModal() {
       importIcon: index < 3 ? "企" : "AI",
       iconClass: index < 3 ? "orange" : "brand",
     }));
-  window.__modalOk = () => {
+  window.__modalOk = async () => {
     if (!state.importSkillSelected.length) return;
-    if (agent) agent.skillIds = Array.from(new Set([...agent.skillIds, ...state.importSkillSelected]));
+    const nextSkillIds = agent ? Array.from(new Set([...agent.skillIds, ...state.importSkillSelected])) : [];
     const count = state.importSkillSelected.length;
     state.modal = null;
     state.importSkillSelected = [];
     state.agentSkillModalAgentId = null;
     state.importSkillSearchQuery = "";
-    showToast(`已导入 ${count} 个技能`);
+    if (agent) await setAgentRelation(agent, "skillIds", nextSkillIds, `已导入 ${count} 个技能`);
   };
   return `<div class="modal-backdrop skill-import-backdrop">
     <div class="modal skill-import-modal">
