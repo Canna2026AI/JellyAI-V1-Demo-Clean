@@ -42,21 +42,25 @@ function renderKnowledgeModal() {
           <span>描述</span>
           <textarea class="textarea" data-knowledge-edit-description placeholder="请输入知识库描述">${escapeHtml(state.knowledgeEditDescription || kb.description)}</textarea>
         </label>
-        <div class="hint">仅保存 Mock 数据，真实后端接入后会调用 PATCH /api/knowledge-bases/:id。</div>
+        <div class="hint">保存后会同步更新知识库元数据、更新时间和审计记录。</div>
       </div>`,
       "保存",
-      () => {
+      async () => {
         const name = document.querySelector("[data-knowledge-edit-name]")?.value.trim();
         const description = document.querySelector("[data-knowledge-edit-description]")?.value.trim();
         if (!name) {
           showToast("请输入知识库名称");
           return;
         }
-        const updated = knowledgeRuntime.update(kb.id, { name, description: description || kb.description });
-        state.modal = null;
-        state.knowledgeEditId = null;
-        showToast("知识库已保存");
-        setState({ knowledgeSelectedId: updated.id });
+        try {
+          const updated = await knowledgeRuntime.update(kb.id, { name, description: description || kb.description });
+          state.modal = null;
+          state.knowledgeEditId = null;
+          showToast("知识库已保存");
+          setState({ knowledgeSelectedId: updated?.id || kb.id });
+        } catch (error) {
+          showToast(`保存失败：${error.message}`);
+        }
       }
     );
   }
@@ -68,15 +72,19 @@ function renderKnowledgeModal() {
       "删除知识库",
       `<div class="knowledge-delete-confirm">
         <b>确认删除“${escapeHtml(kb.name)}”？</b>
-        <p>删除后 Mock 列表、文档和 Chunk 会同步移除。真实后端接入后需要同时清理对象存储、向量索引和审计日志。</p>
+        <p>删除后列表、文档、Chunk、上传文件和审计记录会同步更新。</p>
       </div>`,
       "删除",
-      () => {
-        knowledgeRuntime.remove(kb.id);
-        state.modal = null;
-        state.knowledgeDeleteId = null;
-        showToast("知识库已删除");
-        setState({ knowledgeSelectedId: knowledgeBases[0]?.id || null, knowledgePage: 1 });
+      async () => {
+        try {
+          await knowledgeRuntime.remove(kb.id);
+          state.modal = null;
+          state.knowledgeDeleteId = null;
+          showToast("知识库已删除");
+          setState({ knowledgeSelectedId: knowledgeBases[0]?.id || null, knowledgePage: 1 });
+        } catch (error) {
+          showToast(`删除失败：${error.message}`);
+        }
       }
     );
   }

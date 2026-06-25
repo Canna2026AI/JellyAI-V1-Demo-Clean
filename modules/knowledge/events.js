@@ -2,6 +2,7 @@
 
 const bindKnowledgeOriginalAgentEvents = typeof bindAgentEvents === "function" ? bindAgentEvents : null;
 let knowledgeSearchTimer = null;
+let knowledgeLoadSeq = 0;
 
 if (bindKnowledgeOriginalAgentEvents) {
   bindAgentEvents = function bindAgentEventsWithKnowledge() {
@@ -12,8 +13,38 @@ if (bindKnowledgeOriginalAgentEvents) {
 
 function bindKnowledgeEvents() {
   ensureKnowledgeState();
+  if (!state.knowledgeBackendLoaded && !state.knowledgeBackendLoading) loadKnowledgeFromBackend();
   bindKnowledgeListEvents();
   bindKnowledgeCreateEvents();
+}
+
+function loadKnowledgeFromBackend() {
+  const requestId = ++knowledgeLoadSeq;
+  state.knowledgeBackendLoading = true;
+  state.knowledgeLoadRequestId = requestId;
+  setState({ knowledgeLoading: true });
+  knowledgeRuntime
+    .load({
+      requestId,
+      q: state.knowledgeSearchQuery,
+      status: state.knowledgeStatusFilter,
+      sort: state.knowledgeSort,
+    })
+    .then(() => {
+      if (state.knowledgeLoadRequestId !== requestId) return;
+      const current = knowledgeRuntime.get(state.knowledgeSelectedId);
+      setState({
+        knowledgeBackendLoading: false,
+        knowledgeLoading: false,
+        knowledgeSelectedId: current?.id || knowledgeBases[0]?.id || null,
+      });
+    })
+    .catch((error) => {
+      if (state.knowledgeLoadRequestId !== requestId) return;
+      state.knowledgeBackendLoaded = true;
+      setState({ knowledgeBackendLoading: false, knowledgeLoading: false, knowledgeBackendError: error.message });
+      showToast(`后端连接失败，已使用本地数据：${error.message}`);
+    });
 }
 
 function bindKnowledgeListEvents() {
@@ -23,7 +54,7 @@ function bindKnowledgeListEvents() {
       state.knowledgeSearchQuery = search.value;
       state.knowledgePage = 1;
       window.clearTimeout(knowledgeSearchTimer);
-      knowledgeSearchTimer = window.setTimeout(() => setState({ knowledgeLoading: false }), 220);
+      knowledgeSearchTimer = window.setTimeout(() => loadKnowledgeFromBackend(), 220);
     });
   }
 
@@ -33,16 +64,18 @@ function bindKnowledgeListEvents() {
   const status = document.querySelector("[data-knowledge-status]");
   if (status) {
     status.addEventListener("change", () => {
-      setState({ knowledgeStatusFilter: status.value, knowledgePage: 1, knowledgeLoading: true });
-      setTimeout(() => setState({ knowledgeLoading: false }), 220);
+      state.knowledgeStatusFilter = status.value;
+      state.knowledgePage = 1;
+      loadKnowledgeFromBackend();
     });
   }
 
   const sort = document.querySelector("[data-knowledge-sort]");
   if (sort) {
     sort.addEventListener("change", () => {
-      setState({ knowledgeSort: sort.value, knowledgePage: 1, knowledgeLoading: true });
-      setTimeout(() => setState({ knowledgeLoading: false }), 220);
+      state.knowledgeSort = sort.value;
+      state.knowledgePage = 1;
+      loadKnowledgeFromBackend();
     });
   }
 
@@ -60,12 +93,16 @@ function bindKnowledgeListEvents() {
   );
 
   document.querySelectorAll("[data-knowledge-toggle]").forEach((el) =>
-    el.addEventListener("click", (event) => {
+    el.addEventListener("click", async (event) => {
       event.stopPropagation();
-      const kb = knowledgeRuntime.toggle(el.dataset.knowledgeToggle);
-      if (!kb) return;
-      showToast(kb.enabled ? "知识库已启用" : "知识库已停用");
-      setState({ knowledgeSelectedId: kb.id });
+      try {
+        const kb = await knowledgeRuntime.toggle(el.dataset.knowledgeToggle);
+        if (!kb) return;
+        showToast(kb.enabled ? "知识库已启用" : "知识库已停用");
+        setState({ knowledgeSelectedId: kb.id });
+      } catch (error) {
+        showToast(`状态更新失败：${error.message}`);
+      }
     })
   );
 
@@ -93,18 +130,21 @@ function bindKnowledgeListEvents() {
   );
 
   document.querySelectorAll("[data-knowledge-reindex]").forEach((el) =>
-    el.addEventListener("click", (event) => {
+    el.addEventListener("click", async (event) => {
       event.stopPropagation();
       const id = el.dataset.knowledgeReindex;
-      const kb = knowledgeRuntime.reindex(id);
+      const kb = knowledgeRuntime.reindexLocal(id);
       if (!kb) return;
       showToast("已开始重新索引");
       setState({ knowledgeSelectedId: id, knowledgeActionLoadingId: id });
-      setTimeout(() => {
-        knowledgeRuntime.completeReindex(id);
+      try {
+        await knowledgeRuntime.reindex(id);
         showToast("重新索引完成");
         setState({ knowledgeActionLoadingId: null, knowledgeSelectedId: id });
-      }, 900);
+      } catch (error) {
+        showToast(`重新索引失败：${error.message}`);
+        setState({ knowledgeActionLoadingId: null, knowledgeSelectedId: id });
+      }
     })
   );
 }
@@ -157,8 +197,15 @@ function bindKnowledgeCreateEvents() {
   );
 
   const knowledgeFileUpload = document.querySelector("[data-knowledge-file-upload]");
+  const knowledgeFileInput = document.querySelector("[data-knowledge-file-input]");
   if (knowledgeFileUpload) {
-    knowledgeFileUpload.addEventListener("click", () => startKnowledgeMockUpload(false));
+    knowledgeFileUpload.addEventListener("click", () => knowledgeFileInput?.click());
+    if (knowledgeFileInput) {
+      knowledgeFileInput.addEventListener("change", () => {
+        const file = knowledgeFileInput.files?.[0];
+        if (file) startKnowledgeFileUpload(file);
+      });
+    }
     knowledgeFileUpload.addEventListener("dragover", (event) => {
       event.preventDefault();
       knowledgeFileUpload.classList.add("dragging");
@@ -168,7 +215,8 @@ function bindKnowledgeCreateEvents() {
       event.preventDefault();
       knowledgeFileUpload.classList.remove("dragging");
       const file = event.dataTransfer?.files?.[0];
-      startKnowledgeMockUpload(!isKnowledgeSupportedFile(file?.name), file?.name);
+      if (file) startKnowledgeFileUpload(file);
+      else startKnowledgeFallbackUpload(true, "未知文件");
     });
   }
 
@@ -195,7 +243,7 @@ function bindKnowledgeCreateEvents() {
 
   const knowledgeNext = document.querySelector("[data-knowledge-next]");
   if (knowledgeNext) {
-    knowledgeNext.addEventListener("click", () => {
+    knowledgeNext.addEventListener("click", async () => {
       if (state.knowledgeCreateStep === 1 && !state.knowledgeCreateType) {
         showToast("请选择内容类型");
         return;
@@ -204,13 +252,22 @@ function bindKnowledgeCreateEvents() {
       if (state.knowledgeCreateStep === 2 && !isKnowledgeUploadReady()) return;
       if (state.knowledgeCreateStep === 4) {
         const finalName = document.querySelector("[data-knowledge-final-name]")?.value?.trim();
-        const kb = knowledgeRuntime.create({
+        let kb;
+        try {
+          kb = await knowledgeRuntime.create({
           ...state.knowledgeCreateDraft,
           sourceType: state.knowledgeCreateType,
           name: finalName || state.knowledgeCreateDraft.name,
           uploadName: state.knowledgeUpload?.name,
           size: state.knowledgeUpload?.size,
+          contentBase64: state.knowledgeUpload?.contentBase64,
+          fileName: state.knowledgeUpload?.name,
+          websiteUrl: state.knowledgeCreateType === "website" ? state.knowledgeCreateDraft.description : "",
         });
+        } catch (error) {
+          showToast(`知识库创建失败：${error.message}`);
+          return;
+        }
         showToast("知识库创建完成");
         setState({
           page: "knowledge",
@@ -282,10 +339,10 @@ function isKnowledgeUploadReady() {
 
 function isKnowledgeSupportedFile(fileName = "") {
   if (!fileName) return true;
-  return /\.(pdf|doc|docx|xls|xlsx|txt|csv)$/i.test(fileName);
+  return /\.(pdf|doc|docx|xls|xlsx|txt|csv|json|md|html?)$/i.test(fileName);
 }
 
-function startKnowledgeMockUpload(shouldFail, fileName) {
+function startKnowledgeFallbackUpload(shouldFail, fileName) {
   const source = knowledgeSourceById(state.knowledgeCreateType);
   const ext = source.id === "word" ? "docx" : source.id === "excel" ? "xlsx" : source.id;
   const upload = {
@@ -305,7 +362,7 @@ function startKnowledgeMockUpload(shouldFail, fileName) {
             ...upload,
             progress,
             status: "失败",
-            error: "Mock 上传失败，请重新上传",
+            error: "文件上传失败，请重新上传",
           },
         });
         showToast("上传失败，请重试");
@@ -323,6 +380,46 @@ function startKnowledgeMockUpload(shouldFail, fileName) {
       if (done) showToast(`${upload.name} 上传成功`);
     }, 260 * (index + 1));
   });
+}
+
+async function startKnowledgeFileUpload(file) {
+  if (!isKnowledgeSupportedFile(file.name)) {
+    startKnowledgeFallbackUpload(true, file.name);
+    return;
+  }
+  const upload = {
+    name: file.name,
+    size: `${Math.max(1, Math.round(file.size / 1024))}KB`,
+    progress: 10,
+    status: "读取中",
+    error: "",
+  };
+  setState({ knowledgeUpload: upload });
+  try {
+    const payload = await KnowledgeService.uploadDocument(file, { sourceType: state.knowledgeCreateType });
+    const next = {
+      ...upload,
+      ...payload,
+      name: payload.fileName || payload.documentName || file.name,
+      size: `${Math.max(1, Math.round(file.size / 1024))}KB`,
+      progress: 100,
+      status: "已完成",
+      error: "",
+    };
+    state.knowledgeCreateDraft = {
+      ...state.knowledgeCreateDraft,
+      sourceType: state.knowledgeCreateType,
+      documentName: next.name,
+      name: state.knowledgeCreateDraft.name || `${knowledgeSourceById(state.knowledgeCreateType).label}知识库`,
+      contentBase64: payload.contentBase64,
+      fileName: next.name,
+    };
+    showToast(`${next.name} 上传成功`);
+    setState({ knowledgeUpload: next });
+  } catch (error) {
+    showToast(`上传失败：${error.message}`);
+    setState({ knowledgeUpload: { ...upload, progress: 68, status: "失败", error: error.message } });
+  }
 }
 
 function bindKnowledgeModalEvents() {

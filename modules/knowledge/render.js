@@ -257,14 +257,14 @@ function renderWebsiteUploadStep() {
     </div>
     <div class="form-row">
       <div class="label">网站链接 <span style="color:var(--red)">*</span></div>
-      <textarea class="textarea website-textarea" style="width:100%" placeholder="请输入网页链接，每个网页链接必须单独一行" data-knowledge-draft="description">https://example.com/help</textarea>
+      <textarea class="textarea website-textarea" style="width:100%" placeholder="请输入网页链接，每个网页链接必须单独一行" data-knowledge-draft="description">https://example.com</textarea>
       <div class="hint">请包含完整的网站地址，包括http开头，例如：https://jijyun.cn</div>
     </div>
     <div class="or-line"><span>或</span></div>
     <div class="form-row">
       <div class="label">网站地图(SiteMap)</div>
       <input class="input" style="width:100%" placeholder="请输入" value="https://example.com/sitemap.xml">
-      <div class="hint">Mock 会记录采集任务，真实后端需要异步抓取、去重、清洗和索引。</div>
+      <div class="hint">系统会采集页面文本，保存来源地址，并按当前规则生成索引。</div>
     </div>
     <div class="form-row inline-row">
       <div>
@@ -281,15 +281,16 @@ function renderFileUploadStep() {
   return `<div class="knowledge-form-panel">
     <div class="upload-drop knowledge-file-drop ${state.knowledgeUpload?.status === "失败" ? "error" : ""}" title="点击或拖拽文件到此处上传" data-knowledge-file-upload>
       <b>将 ${escapeHtml(source.label)} 文件拖拽至此区域或 <span>选择文件上传</span></b>
-      <p>支持 PDF、Word、Excel、TXT、CSV。Mock 上传会展示进度、状态和失败提示。</p>
+      <p>支持 PDF、Word、Excel、TXT、CSV、JSON、Markdown 和 HTML 文件，并展示上传进度、状态和失败提示。</p>
     </div>
+    <input class="knowledge-hidden-file" type="file" data-knowledge-file-input accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.json,.md,.html">
     ${renderKnowledgeUploadState()}
   </div>`;
 }
 
 function renderKnowledgeUploadState() {
   const upload = state.knowledgeUpload;
-  if (!upload) return `<div class="hint">当前未选择文件。点击上传区域可模拟上传。</div>`;
+  if (!upload) return `<div class="hint">当前未选择文件。点击或拖拽文件到上传区域。</div>`;
   return `<div class="knowledge-upload-state">
     <div class="knowledge-upload-row">
       <div><b>${escapeHtml(upload.name)}</b><span>${escapeHtml(upload.status)}</span></div>
@@ -314,7 +315,7 @@ function renderSegmentStep() {
     <div class="segment-main">
       <div class="knowledge-vector-intro">
         <h3>分段与清洗设置</h3>
-        <p>支持自动分段、自定义分段和逐行向量。Mock 会生成 Chunk 预览，真实后端接入后在此提交分段参数和清洗规则。
+        <p>支持自动分段、自定义分段和逐行向量。系统会按当前参数生成 Chunk 预览，并在确认后保存分段和清洗规则。
           <a href="./assets/templates/knowledge-row-vector-template.xlsx" download="知识库文件导入模板.xlsx" data-template-download>下载"逐行向量"示例文件</a>
         </p>
       </div>
@@ -400,7 +401,7 @@ function renderKnowledgeCompleteStep() {
     <div class="complete-summary">
       <div><span>来源</span><b>${escapeHtml(source.label)}</b></div>
       <div><span>分段</span><b>${state.knowledgeSegmentMode === "custom" ? "自定义" : state.knowledgeVectorMode === "row" ? "逐行" : "自动"}</b></div>
-      <div><span>Embedding</span><b>Mock 完成</b></div>
+      <div><span>Embedding</span><b>已完成</b></div>
     </div>
   </div>`;
 }

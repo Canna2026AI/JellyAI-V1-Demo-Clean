@@ -2,7 +2,7 @@
 
 const KnowledgeMock = {
   listKnowledgeBases(params = {}) {
-    const query = (params.query || "").trim().toLowerCase();
+    const query = (params.q || params.query || "").trim().toLowerCase();
     const status = params.status || "全部状态";
     return (window.knowledgeBases || []).filter((kb) => {
       const text = `${kb.name} ${kb.description} ${kb.type} ${kb.sourceType}`.toLowerCase();

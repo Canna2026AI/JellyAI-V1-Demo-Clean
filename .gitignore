@@ -1,0 +1,4 @@
+storage/knowledge/*.json
+storage/knowledge/uploads/*
+!storage/knowledge/uploads/.gitkeep
+.DS_Store

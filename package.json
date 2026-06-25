@@ -1,0 +1,10 @@
+{
+  "name": "jellyai-v1-demo-clean",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js",
+    "check": "find . -name '*.js' -type f -not -path './storage/*' -print0 | sort -z | xargs -0 -n1 node --check"
+  }
+}

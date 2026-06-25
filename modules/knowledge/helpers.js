@@ -71,8 +71,8 @@ function knowledgeNow() {
 function knowledgeDefaultChunks(sourceType, name) {
   const base = [
     `来源 ${name || sourceType} 已完成内容清洗，保留业务关键词和上下文。`,
-    "系统按当前分段规则生成可检索 Chunk，等待后端 Embedding 服务接入。",
-    "Mock 流程已记录文档状态、Chunk 数量、更新时间和索引状态。",
+    "系统按当前分段规则生成可检索 Chunk，并记录 Embedding 状态。",
+    "知识库流程已记录文档状态、Chunk 数量、更新时间和索引状态。",
   ];
   return base.map((text, index) => ({
     id: `ck-new-${Date.now()}-${index + 1}`,

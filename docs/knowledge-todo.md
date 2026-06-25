@@ -1,42 +1,47 @@
 # Knowledge Backend TODO
 
-The knowledge module is still Mock-only. The frontend now has the workflows and service boundary needed for backend integration, but no real backend calls are made.
+The knowledge module now has a local demo backend implemented with Node.js, JSON persistence, file upload storage, text extraction, chunking, reindexing, search debug, and CRUD APIs. This document tracks what is already available locally and what must still be implemented for a production backend.
+
+## Local Demo Backend
+
+- `GET /api/health`
+  - Checks that the local backend is running.
+- `GET /api/knowledge-bases`
+  - Supports `q`, `status`, `sourceType`, `sort`, `page`, and `pageSize`.
+- `POST /api/knowledge-bases`
+  - Creates text, website, PDF, Word, Excel, TXT, CSV, JSON, Markdown, and HTML knowledge bases.
+- `GET /api/knowledge-bases/:id`
+  - Returns detail, documents, chunks, size, timestamps, enabled state, and embedding state.
+- `PATCH /api/knowledge-bases/:id`
+  - Updates name, description, and enabled state.
+- `DELETE /api/knowledge-bases/:id`
+  - Deletes metadata and local uploaded files.
+- `POST /api/knowledge-bases/:id/reindex`
+  - Rebuilds chunks and marks embeddings complete.
+- `GET /api/knowledge-bases/:id/documents`
+  - Lists local documents.
+- `POST /api/knowledge-bases/:id/documents`
+  - Adds a document to an existing knowledge base.
+- `DELETE /api/knowledge-bases/:id/documents/:documentId`
+  - Deletes one document and recalculates counters.
+- `GET /api/knowledge-bases/:id/chunks`
+  - Lists chunks with optional `documentId`, `q`, `page`, and `pageSize`.
+- `POST /api/chunks/preview`
+  - Returns chunk preview for current text and segmentation parameters.
+- `GET /api/knowledge-search/debug`
+  - Returns local keyword search matches with source citations.
+- `POST /api/knowledge-search/debug`
+  - Same as GET, useful for larger debug payloads.
 
 ## API
 
-- `GET /api/knowledge-bases`
-  - Query: `q`, `status`, `sourceType`, `sort`, `page`, `pageSize`
-  - Returns: id, name, description, status, enabled, source type, document count, chunk count, embedding status, size, created time, updated time.
-- `POST /api/knowledge-bases`
-  - Creates a knowledge base for text, website, PDF, Word, Excel, TXT, or CSV.
-  - Body: name, description, source type, segmentation mode, cleaning rules, vector mode, tenant id.
-- `GET /api/knowledge-bases/:id`
-  - Returns detail, documents, chunks, embedding status, size, timestamps, job states, permissions.
-- `PATCH /api/knowledge-bases/:id`
-  - Edits name, description, enabled state, source metadata, segmentation settings.
-- `DELETE /api/knowledge-bases/:id`
-  - Deletes metadata and schedules cleanup for documents, object storage, chunks, embeddings, vector indexes.
-- `POST /api/knowledge-bases/:id/reindex`
-  - Starts an async parse/chunk/embed/index job.
-- `GET /api/knowledge-bases/:id/jobs`
-  - Lists active and historical parse, OCR, chunk, embedding, and reindex jobs.
-- `POST /api/knowledge-bases/:id/documents`
-  - Creates a document record from text, website URL, object-storage key, or uploaded file metadata.
-- `GET /api/knowledge-bases/:id/documents`
-  - Lists documents with parse status, chunk count, error state, updated time.
-- `DELETE /api/knowledge-bases/:id/documents/:documentId`
-  - Deletes one document and its chunks/embeddings.
-- `GET /api/knowledge-bases/:id/chunks`
-  - Query: `documentId`, `embeddingStatus`, `q`, `page`, `pageSize`
-  - Returns chunk text, source document, token count, embedding status, vector id, updated time.
-- `POST /api/chunks/preview`
-  - Returns Chunk preview for automatic, custom separator, fixed length, overlap, and row-based modes.
-- `POST /api/uploads/presign`
-  - Returns object-storage upload URL, headers, upload id, max size, accepted MIME types.
-- `GET /api/uploads/:uploadId`
-  - Returns upload progress, antivirus status, parse status, errors, final document id.
-- `POST /api/knowledge-search/debug`
-  - Returns matched chunks, vector scores, rerank scores, final context, source documents, latency breakdown.
+- Add tenant-aware auth middleware to every endpoint.
+- Add `GET /api/knowledge-bases/:id/jobs` for parse, crawl, chunk, embedding, reindex, and cleanup jobs.
+- Add `POST /api/uploads/presign` for direct object-storage upload.
+- Add `GET /api/uploads/:uploadId` for upload progress, antivirus status, parse status, and errors.
+- Add `POST /api/knowledge-search` for production retrieval with hybrid keyword/vector search.
+- Add `GET /api/knowledge-bases/:id/audit-logs` for customer-visible operation history.
+- Add pagination and filtering for documents, chunks, jobs, and audit logs.
 
 ## Database
 
@@ -53,15 +58,14 @@ The knowledge module is still Mock-only. The frontend now has the workflows and 
 - `knowledge_audit_logs`
   - action, actor_id, tenant_id, target_id, before_json, after_json, ip, user_agent.
 
-## Server Jobs
+## Server
 
-- Website crawl job: URL normalization, sitemap parsing, robots policy, deduplication, rate limiting.
-- Document parse job: PDF/Word/Excel/TXT/CSV parsing, table extraction, metadata extraction.
-- OCR job: scanned PDF/image detection, OCR queue, confidence score, fallback errors.
-- Chunk job: automatic segmentation, custom separator, overlap, row mode, cleaning rules.
-- Embedding job: batch embedding, retry, token usage, per-chunk status, vector upsert.
-- Reindex job: rebuild chunks and vectors without losing the active searchable version.
-- Cleanup job: remove deleted files, chunks, embeddings, vector rows, stale jobs.
+- Move local JSON persistence to a real database with migrations.
+- Split upload, parse, chunk, embedding, retrieval, audit, and permission services.
+- Add request validation, typed error codes, rate limiting, and structured logs.
+- Add job workers for website crawl, document parse, OCR, chunking, embedding, reindex, and cleanup.
+- Add idempotency keys for create, upload, delete, and reindex operations.
+- Add tenant isolation checks to every read and mutation.
 
 ## Webhook
 
@@ -73,25 +77,28 @@ The knowledge module is still Mock-only. The frontend now has the workflows and 
 - `knowledge.embedding.failed`
 - `knowledge.reindex.completed`
 - `knowledge.reindex.failed`
+- `knowledge.document.deleted`
+- `knowledge.permission.changed`
 
-Each webhook should include tenant id, knowledge base id, document id when relevant, job id, status, error code, and retry count.
+Each webhook should include tenant id, knowledge base id, document id when relevant, job id, status, error code, retry count, and timestamp.
 
 ## Third-Party SDK
 
 - Embedding provider SDK for batch embeddings and token usage.
 - Rerank provider SDK for retrieval reranking.
 - OCR provider SDK for scanned PDFs and images.
-- Website crawler/render SDK if dynamic pages require headless rendering.
+- Website crawler/render SDK for dynamic pages.
 - Object storage SDK such as S3-compatible storage, Cloudflare R2, or Aliyun OSS.
-- Vector database SDK for Milvus or pgvector.
+- Vector database SDK such as pgvector, Milvus, Qdrant, or Pinecone.
+- Antivirus or file safety scanning SDK for uploads.
 
 ## Object Storage
 
 - Store original files by tenant and knowledge base.
-- Store parsed intermediate artifacts: extracted text, page images, tables, OCR output.
-- Use pre-signed upload URLs with file type and size enforcement.
+- Store parsed artifacts: extracted text, page images, tables, OCR output, and parser metadata.
+- Use pre-signed upload URLs with MIME type and size enforcement.
 - Record checksum to avoid duplicate uploads.
-- Run lifecycle cleanup for deleted knowledge bases and failed uploads.
+- Add lifecycle cleanup for deleted knowledge bases, deleted documents, failed uploads, and stale parse artifacts.
 
 ## Redis
 
@@ -111,13 +118,13 @@ Each webhook should include tenant id, knowledge base id, document id when relev
 - Viewers can read list/detail and use search, but cannot mutate.
 - Audit every create, edit, delete, upload, enable/disable, reindex, and permission change.
 
-## Login And Session
+## Login
 
-- Require authenticated user for all knowledge APIs.
+- Require authenticated user for all production knowledge APIs.
 - Session must carry tenant id, user id, roles, and allowed knowledge scopes.
 - API should reject cross-tenant object keys and document ids.
 - Upload presign must be bound to session and expire quickly.
-- Long-running jobs should run under a service identity but preserve original actor id for audit.
+- Long-running jobs should run under a service identity while preserving the original actor id for audit.
 
 ## Retrieval
 
@@ -125,4 +132,4 @@ Each webhook should include tenant id, knowledge base id, document id when relev
 - Metadata filters: tenant, knowledge base, document type, enabled state.
 - Rerank after initial retrieval.
 - Return citations with document name, chunk id, page/row when available.
-- Track latency and token usage per query.
+- Track latency, token usage, matched chunk ids, and rerank decisions per query.
