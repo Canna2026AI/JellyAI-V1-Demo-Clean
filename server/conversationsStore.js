@@ -18,6 +18,62 @@ const defaultCustomViews = [
 
 const defaultStore = {
   version: 1,
+  tenants: [
+    { id: "tenant-demo", name: "欧诚国际物流" },
+  ],
+  roles: [
+    {
+      id: "role-admin",
+      name: "管理员",
+      permissions: ["*"],
+    },
+    {
+      id: "role-agent",
+      name: "客服坐席",
+      permissions: [
+        "conversations:read",
+        "conversations:message",
+        "conversations:update",
+        "conversations:assign",
+        "quickReplies:manage",
+      ],
+    },
+    {
+      id: "role-viewer",
+      name: "只读成员",
+      permissions: ["conversations:read"],
+    },
+  ],
+  users: [
+    {
+      id: "user-kelvin",
+      username: "kelvin",
+      password: "demo123",
+      name: "Kelvin",
+      tenantId: "tenant-demo",
+      roleIds: ["role-admin"],
+      agentName: "Kelvin",
+    },
+    {
+      id: "user-canna",
+      username: "canna",
+      password: "demo123",
+      name: "Canna",
+      tenantId: "tenant-demo",
+      roleIds: ["role-agent"],
+      agentName: "Canna",
+    },
+    {
+      id: "user-viewer",
+      username: "viewer",
+      password: "demo123",
+      name: "Viewer",
+      tenantId: "tenant-demo",
+      roleIds: ["role-viewer"],
+      agentName: "Viewer",
+    },
+  ],
+  sessions: [],
   customViews: defaultCustomViews,
   quickMessages: {
     groups: [
@@ -259,6 +315,10 @@ function ensureStoreFile() {
 function normalizeStore(store) {
   const next = store && typeof store === "object" ? store : {};
   next.version = 1;
+  next.tenants = Array.isArray(next.tenants) && next.tenants.length ? next.tenants : clone(defaultStore.tenants);
+  next.roles = Array.isArray(next.roles) && next.roles.length ? next.roles : clone(defaultStore.roles);
+  next.users = Array.isArray(next.users) && next.users.length ? next.users : clone(defaultStore.users);
+  next.sessions = Array.isArray(next.sessions) ? next.sessions.filter((session) => new Date(session.expiresAt).getTime() > Date.now()) : [];
   next.customViews = Array.isArray(next.customViews) && next.customViews.length ? next.customViews : clone(defaultStore.customViews);
   next.quickMessages = next.quickMessages && typeof next.quickMessages === "object" ? next.quickMessages : clone(defaultStore.quickMessages);
   next.quickMessages.groups = Array.isArray(next.quickMessages.groups) ? next.quickMessages.groups : [];
@@ -268,6 +328,12 @@ function normalizeStore(store) {
   next.settings.automation = merge(defaultStore.settings.automation, next.settings.automation || {});
   next.settings.forwarding = merge(defaultStore.settings.forwarding, next.settings.forwarding || {});
   next.conversations = Array.isArray(next.conversations) && next.conversations.length ? next.conversations : clone(defaultStore.conversations);
+  next.conversations.forEach((conversation) => {
+    conversation.tenantId = conversation.tenantId || "tenant-demo";
+    conversation.messages = Array.isArray(conversation.messages) ? conversation.messages : [];
+    conversation.viewTags = Array.isArray(conversation.viewTags) ? conversation.viewTags : [];
+    conversation.tags = Array.isArray(conversation.tags) ? conversation.tags : [];
+  });
   next.auditLogs = Array.isArray(next.auditLogs) ? next.auditLogs : [];
   return next;
 }

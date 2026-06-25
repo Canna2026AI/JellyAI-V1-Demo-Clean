@@ -4,13 +4,20 @@ window.conversationService = (() => {
   const baseUrl = "/api/conversations";
   let backendOnline = false;
   let warnedOffline = false;
+  let authenticating = null;
+  let eventSource = null;
 
-  async function request(path, options = {}) {
+  async function request(path, options = {}, retry = true) {
     if (!canUseBackend()) return null;
     const response = await fetch(`${baseUrl}${path}`, {
       headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      credentials: "same-origin",
       ...options,
     });
+    if (response.status === 401 && retry) {
+      await login();
+      return request(path, options, false);
+    }
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
       throw new Error(payload.message || `API ${response.status}`);
@@ -24,9 +31,31 @@ window.conversationService = (() => {
     return ["http:", "https:"].includes(window.location.protocol);
   }
 
+  async function login(username = "kelvin", password = "demo123") {
+    if (authenticating) return authenticating;
+    authenticating = fetch("/api/auth/login", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.message || "登录失败");
+        }
+        return response.json();
+      })
+      .finally(() => {
+        authenticating = null;
+      });
+    return authenticating;
+  }
+
   async function loadState() {
     try {
-      const state = await request("/state");
+      await login();
+      const state = await request("/state", {}, false);
       backendOnline = Boolean(state);
       return state;
     } catch (error) {
@@ -53,6 +82,7 @@ window.conversationService = (() => {
 
   return {
     isOnline: () => backendOnline,
+    login,
     loadState,
     list: (params = {}) => sync(`?${new URLSearchParams(params).toString()}`),
     getMeta: () => sync("/meta"),
@@ -75,5 +105,21 @@ window.conversationService = (() => {
     saveWorkHours: (settings) => sync("/settings/worktime", json("PATCH", settings)),
     saveAutomation: (settings) => sync("/settings/automation", json("PATCH", settings)),
     saveForwarding: (settings) => sync("/settings/forwarding", json("PATCH", settings)),
+    subscribe: (onEvent) => {
+      if (!backendOnline || !window.EventSource) return null;
+      if (eventSource) eventSource.close();
+      eventSource = new EventSource(`${baseUrl}/events`);
+      eventSource.onmessage = (message) => {
+        try {
+          onEvent(JSON.parse(message.data));
+        } catch (error) {
+          console.warn("Conversation event parse failed:", error.message);
+        }
+      };
+      eventSource.onerror = () => {
+        if (eventSource?.readyState === EventSource.CLOSED) eventSource = null;
+      };
+      return eventSource;
+    },
   };
 })();

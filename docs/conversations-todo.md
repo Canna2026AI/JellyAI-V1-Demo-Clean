@@ -10,9 +10,14 @@
 
 ## Local API Implemented
 
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `POST /api/auth/logout`
 - `GET /api/health`
 - `GET /api/conversations/state`
 - `GET /api/conversations/meta`
+- `GET /api/conversations/events`
+  - Server-Sent Events，推送 `message.created`, `conversation.updated`, `webhook.message`, `settings.updated`, `quickReplies.updated`。
 - `GET /api/conversations`
   - 支持 `view`, `q`, `searchMode`, `status`, `channel`, `sort`, `cursor`, `limit`。
   - Response: `items`, `total`, `filteredTotal`, `page.nextCursor`, `page.hasMore`, `meta`。
@@ -45,6 +50,17 @@
 - `PATCH /api/conversations/settings/automation`
 - `PATCH /api/conversations/settings/forwarding`
 - `POST /api/conversations/webhooks/:provider/messages`
+  - 支持环境变量 `JELLY_WEBHOOK_SECRET`；配置后需要请求头 `x-jelly-webhook-secret`。
+
+## Local Auth And Permissions
+
+- 默认用户：
+  - `kelvin / demo123`：管理员，拥有 `*` 权限。
+  - `canna / demo123`：客服坐席，允许查看、发消息、更新会话、转人工、管理快捷回复。
+  - `viewer / demo123`：只读成员，只能查看会话。
+- 会话使用 HTTP-only Cookie：`jelly_session`。
+- 前端 `services/conversationsService.js` 会自动用 `kelvin` Demo 账号登录，再加载聚合对话 state。
+- 审计日志记录 `operator`, `operatorId`, `tenantId`。
 
 ## Production TODO
 
