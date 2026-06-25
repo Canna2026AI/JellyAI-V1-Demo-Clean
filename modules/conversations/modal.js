@@ -2,6 +2,9 @@
 
 function renderConversationModal() {
   if (!state.modal) return "";
+if (state.modal === "conversationConfirm") {
+    return renderConversationConfirmModal();
+  }
 if (state.modal === "customView") {
     return renderCustomViewModal();
   }
@@ -15,6 +18,20 @@ if (state.modal === "quickReply") {
   }
 
   return "";
+}
+
+function renderConversationConfirmModal() {
+  const confirm = state.conversationConfirm || {};
+  window.__modalOk = () => {
+    window.__conversationConfirmAction?.();
+    window.__conversationConfirmAction = null;
+    state.conversationConfirm = null;
+  };
+  return `<div class="modal-backdrop"><div class="modal conversation-confirm-modal">
+    <div class="modal-head">${escapeHtml(confirm.title || "确认操作")}<button class="button ghost" data-close-modal>×</button></div>
+    <div class="modal-body">${escapeHtml(confirm.body || "请确认是否继续。")}</div>
+    <div class="modal-foot"><button class="button" data-close-modal>取消</button><button class="button primary" data-modal-ok>${escapeHtml(confirm.okText || "确认")}</button></div>
+  </div></div>`;
 }
 
 function renderQuickReplyModal() {
