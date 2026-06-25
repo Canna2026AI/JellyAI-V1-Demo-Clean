@@ -12,17 +12,25 @@
 
 - `GET /api/health`
 - `GET /api/conversations/state`
+- `GET /api/conversations/meta`
 - `GET /api/conversations`
+  - 支持 `view`, `q`, `searchMode`, `status`, `channel`, `sort`, `cursor`, `limit`。
+  - Response: `items`, `total`, `filteredTotal`, `page.nextCursor`, `page.hasMore`, `meta`。
 - `PUT /api/conversations`
 - `GET /api/conversations/:id`
 - `PATCH /api/conversations/:id`
+- `GET /api/conversations/:id/messages`
+  - 支持 `cursor`, `limit`。
 - `POST /api/conversations/:id/messages`
 - `PATCH /api/conversations/:id/status`
 - `PATCH /api/conversations/:id/assignee`
 - `PATCH /api/conversations/:id/tags`
+- `PATCH /api/conversations/:id/customer`
 - `PATCH /api/conversations/:id/hosting`
 - `PATCH /api/conversations/:id/star`
 - `PATCH /api/conversations/:id/read`
+- `GET /api/conversations/audit-logs`
+  - 支持 `conversationId`, `action`, `cursor`, `limit`。
 - `GET /api/conversations/custom-views`
 - `PUT /api/conversations/custom-views`
 - `POST /api/conversations/custom-views`

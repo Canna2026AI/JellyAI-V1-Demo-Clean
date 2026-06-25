@@ -290,9 +290,9 @@ function loadConversationData() {
   return Array.isArray(saved) && saved.length ? saved : structuredClone(defaultConversationData);
 }
 
-function saveConversationData() {
+function saveConversationData(options = {}) {
   writeJsonStorage(conversationStorageKey, conversationData);
-  syncConversationBackend(window.conversationService?.saveConversations(conversationData));
+  if (!options.skipBackendBulk) syncConversationBackend(window.conversationService?.saveConversations(conversationData));
 }
 
 function loadWorkHoursSettings() {
@@ -487,7 +487,8 @@ function markConversationRead(conversationId) {
   const conversation = conversationData.find((item) => item.id === conversationId);
   if (!conversation) return;
   conversation.unread = false;
-  saveConversationData();
+  saveConversationData({ skipBackendBulk: true });
+  syncConversationBackend(window.conversationService?.markRead(conversationId, false));
 }
 
 function addConversationMessage(conversationId, text, role = "me") {
@@ -508,7 +509,13 @@ function addConversationMessage(conversationId, text, role = "me") {
   conversation.assignee = role === "me" ? currentAgentName : conversation.assignee;
   conversation.assignedToMe = role === "me" ? true : conversation.assignedToMe;
   conversation.viewTags = conversation.viewTags.filter((tag) => tag !== "未人工回复");
-  saveConversationData();
+  saveConversationData({ skipBackendBulk: true });
+  syncConversationBackend(window.conversationService?.sendMessage(conversationId, {
+    clientMessageId: message.id,
+    content: text,
+    role,
+    type: "text",
+  }));
   return message;
 }
 
@@ -519,7 +526,8 @@ function updateConversationStatus(conversationId, status) {
   conversation.statusColor = status === "已解决" ? "green" : "orange";
   conversation.messages.push({ id: `sys-${Date.now()}`, role: "system", text: `会话状态已更新为：${status}`, createdAt: "刚刚" });
   conversation.updatedAt = new Date().toISOString();
-  saveConversationData();
+  saveConversationData({ skipBackendBulk: true });
+  syncConversationBackend(window.conversationService?.updateStatus(conversationId, status));
 }
 
 function toggleConversationResolved(conversationId) {
@@ -541,7 +549,8 @@ function transferConversationToHuman(conversationId) {
   conversation.viewTags = conversation.viewTags.filter((tag) => tag !== "未人工回复");
   conversation.messages.push({ id: `sys-${Date.now()}`, role: "system", text: `已转入人工对话，操作人：${currentAgentName}`, createdAt: "刚刚" });
   conversation.updatedAt = new Date().toISOString();
-  saveConversationData();
+  saveConversationData({ skipBackendBulk: true });
+  syncConversationBackend(window.conversationService?.transferToHuman(conversationId, currentAgentName));
 }
 
 function toggleConversationTag(conversationId, tag) {
@@ -552,7 +561,8 @@ function toggleConversationTag(conversationId, tag) {
   } else {
     conversation.tags.push(tag);
   }
-  saveConversationData();
+  saveConversationData({ skipBackendBulk: true });
+  syncConversationBackend(window.conversationService?.updateTags(conversationId, conversation.tags));
 }
 
 function addConversationTag(conversationId, tag) {
@@ -560,7 +570,8 @@ function addConversationTag(conversationId, tag) {
   if (!conversation || !tag.trim()) return false;
   const clean = tag.trim().slice(0, 12);
   if (!conversation.tags.includes(clean)) conversation.tags.push(clean);
-  saveConversationData();
+  saveConversationData({ skipBackendBulk: true });
+  syncConversationBackend(window.conversationService?.updateTags(conversationId, conversation.tags));
   return true;
 }
 
@@ -569,7 +580,8 @@ function toggleConversationHosted(conversationId) {
   if (!conversation) return null;
   conversation.hosted = !conversation.hosted;
   conversation.messages.push({ id: `sys-${Date.now()}`, role: "system", text: `托管状态已${conversation.hosted ? "开启" : "暂停"}`, createdAt: "刚刚" });
-  saveConversationData();
+  saveConversationData({ skipBackendBulk: true });
+  syncConversationBackend(window.conversationService?.updateHosting(conversationId, conversation.hosted));
   return conversation.hosted;
 }
 

@@ -310,7 +310,8 @@ function bindConversationInfoEvents() {
     conv.starred = !conv.starred;
     if (conv.starred && !conv.viewTags.includes("收藏")) conv.viewTags.push("收藏");
     if (!conv.starred) conv.viewTags = conv.viewTags.filter((tag) => tag !== "收藏");
-    saveConversationData();
+    saveConversationData({ skipBackendBulk: true });
+    syncConversationBackend(window.conversationService?.updateStarred(conv.id, conv.starred));
     showToast(conv.starred ? "已收藏会话" : "已取消收藏");
     setState({});
   });

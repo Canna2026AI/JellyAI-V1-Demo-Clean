@@ -116,3 +116,11 @@ curl -X POST http://localhost:3000/api/conversations/group/messages \
   -H 'Content-Type: application/json' \
   -d '{"clientMessageId":"demo-1","content":"这是一条真实写入后端的人工消息"}'
 ```
+
+运行后端 API 验收：
+
+```bash
+npm run test:api
+```
+
+该脚本会自动启动一个临时后端，覆盖会话分页、消息发送幂等、消息分页、客户资料更新、状态、标签、托管、收藏、审计日志、快捷回复、工作时间和 webhook 入站消息。
