@@ -2,11 +2,41 @@
   "name": "jellyai-v1-demo-clean",
   "version": "1.0.0",
   "private": true,
-  "description": "JellyAI V1 demo with a local conversations backend.",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "check:js": "find . -name '*.js' -type f -print0 | sort -z | xargs -0 -n1 node --check",
-    "test:api": "node scripts/test-conversations-api.js"
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "next typegen && tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:push": "drizzle-kit push",
+    "db:seed": "tsx scripts/seed-admin.ts"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "drizzle-orm": "^0.45.2",
+    "dotenv": "^17.2.3",
+    "next": "16.2.9",
+    "postgres": "^3.4.7",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9.39.1",
+    "eslint-config-next": "16.2.9",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "postcss": "^8.5.10",
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.12"
+    }
   }
 }

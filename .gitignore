@@ -1,4 +1,11 @@
-.jelly-data/
 node_modules/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
 .DS_Store
-
+public/legacy/

@@ -1,149 +1,195 @@
-# JellyAI V1 Demo Clean
+# JellyAI Admin Fullstack Foundation
 
-这是 JellyAI V1 Demo 的干净源码版本。
+This branch contains the Next.js fullstack management foundation for JellyAI. It is not the static V1 Demo mainline. It adds platform admin, tenant login, API routes, Drizzle/Postgres schema, model configuration, token quota, and usage accounting.
 
-本项目用于产品演示、前后端交互确认、后续正式开发前的协作基线。当前版本不使用 React，不使用 Next.js；聚合对话模块已内置一个零依赖 Node.js 后端，支持本地真实 API 和 JSON 持久化。
+## Project Positioning
 
-## 如何运行
+- Platform admins create customers, tenant users, model configs, and token quotas.
+- Tenant users log in to `/app` and can only access data from their own tenant.
+- Token usage is persisted per tenant/user/model.
+- The original static Demo files remain in the repo and should not be deleted or force-migrated in this branch.
 
-推荐用内置后端启动：
+## Tech Stack
 
-```bash
-npm start
-```
+- Next.js App Router
+- React
+- TypeScript
+- Drizzle ORM
+- PostgreSQL
+- bcryptjs password hashing
+- Database-backed session + `httpOnly` cookie
 
-然后打开：
-
-```text
-http://localhost:3000
-```
-
-聚合对话数据会持久化到：
-
-```text
-.jelly-data/conversations-store.json
-```
-
-如果只需要查看静态页面，也可以使用任意静态服务器直接打开 `index.html`。此时聚合对话会自动降级为浏览器 localStorage 数据。
-
-内置后端会自动使用 Demo 账号登录：
+## Directory Structure
 
 ```text
-用户名：kelvin
-密码：demo123
-角色：管理员
+app/                      Next.js pages, layouts, Server Actions, API routes
+app/admin/                Platform admin pages
+app/app/                  Tenant user workspace
+app/api/auth/             Login/logout/me APIs
+app/api/app/              Tenant-scoped APIs
+app/api/admin/            Platform admin APIs
+components/               Shared client components
+lib/auth/                 Auth/session/API guard helpers
+lib/db/                   Drizzle client and schema
+lib/tokens.ts             Token estimation, balance, usage helpers
+lib/validators.ts         Zod validators
+drizzle/                  SQL migrations
+scripts/migrate.ts        Local migration runner
+scripts/seed-admin.ts     Platform admin seed script
 ```
 
-也可以手动调用：
+## Environment Variables
+
+Copy `.env.example` to `.env.local`:
 
 ```bash
-curl -i -X POST http://localhost:3000/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"kelvin","password":"demo123"}'
+cp .env.example .env.local
 ```
 
-## 项目结构
+Required:
+
+```bash
+DATABASE_URL="postgres://postgres:postgres@localhost:5432/jellyai"
+SESSION_SECRET="replace-with-a-long-random-session-secret"
+ADMIN_EMAIL="admin@jellyai.local"
+ADMIN_PASSWORD="ChangeMe123!"
+MODEL_API_KEY=""
+MODEL_BASE_URL="https://api.openai.com/v1"
+NODE_ENV="development"
+```
+
+Compatibility aliases are still accepted:
+
+```bash
+AUTH_SECRET=""
+SEED_ADMIN_ACCOUNT=""
+SEED_ADMIN_PASSWORD=""
+OPENAI_API_KEY=""
+```
+
+## Install
+
+```bash
+npm install
+```
+
+## Initialize Database
+
+The current implementation requires PostgreSQL. SQLite is not implemented in this branch.
+
+Run all SQL migrations:
+
+```bash
+npm run db:migrate
+```
+
+Create or update the platform admin:
+
+```bash
+npm run db:seed
+```
+
+## Start
+
+```bash
+npm run dev
+```
+
+Open:
 
 ```text
-JellyAI-V1-Demo-Clean/
-├── index.html
-├── app.js
-├── server.js
-├── vercel.json
-├── assets/
-├── core/
-├── data/
-├── services/
-├── server/
-├── modules/
-└── styles/
+http://localhost:3000/login
 ```
 
-## 目录说明
+If port 3000 is already used, Next.js will ask or select another port.
 
-`index.html`：静态入口，按顺序加载拆分后的 CSS 和 JS。
+## Login
 
-`app.js`：应用启动入口，先尝试加载聚合对话后端 state，再调用 `render()`。
+Use the account from `.env.local`:
 
-`server.js`：本地 Node.js 后端和静态文件服务，提供 `/api/conversations/*`。
+```text
+ADMIN_EMAIL
+ADMIN_PASSWORD
+```
 
-`assets/`：图片、模板文件等静态资源，例如 JellyAI logo 和知识库导入模板。
+Tenant accounts are created by the platform admin from `/admin/customers` or through the admin API.
 
-`core/`：全局能力，包括状态、路由、Toast、Modal、事件委托和通用工具边界。
+## Pages
 
-`data/`：mock 数据，按业务模块拆分。
+- `/login` - account/password login
+- `/admin` - dashboard
+- `/admin/customers` - customer list and customer creation
+- `/admin/customers/[id]` - customer detail, users, model selection, token adjustment
+- `/admin/models` - model configuration and model-level usage
+- `/admin/system` - environment/database/model runtime status
+- `/app` - tenant workspace
 
-`services/`：浏览器端服务层。`services/conversationsService.js` 负责聚合对话 API 接入和静态降级。
+## API List
 
-`server/`：后端数据层。`server/conversationsStore.js` 负责默认数据、JSON store、读写归一化。
+Auth:
 
-`modules/`：业务模块，每个模块都有独立目录。当前核心模块包括：
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
 
-- `conversations/`：聚合对话
-- `agents/`：AI 智能体
-- `channels/`：对话渠道
-- `wecom/`：企业微信托管
-- `knowledge/`：知识库
-- `marketing/`：AI 微信营销
-- `contacts/`：联系人
-- `analytics/`：数据分析
-- `settings/`：教学、系统设置等页面
-- `flow/`：AI 流程
+Tenant:
 
-`styles/`：样式按原始顺序拆分，保持当前 V1 Demo 的视觉效果和 CSS 级联行为不变。
+- `GET /api/app/bootstrap`
+- `POST /api/app/chat`
+- `GET /api/app/records`
+- `POST /api/app/records`
+- `PATCH /api/app/records/:id`
+- `DELETE /api/app/records/:id`
 
-## 后续开发规范
+Admin:
 
-1. 新功能优先在对应 `modules/<module>/` 下开发。
-2. mock 数据优先放在 `data/`，不要散落在 render 函数里。
-3. 公共能力放在 `core/`，不要让模块之间互相直接修改内部逻辑。
-4. 当前 `core/events.js` 仍是集中事件委托，后续可逐步迁移到各模块的 `events.js`。
-5. 样式新增时优先写入对应模块 CSS 文件，公共样式写入 `styles/components.css` 或 `styles/layout.css`。
-6. 聚合对话已接入本地后端 API；其他模块接后端前先设计服务层边界。
-7. 每次只改一个功能模块，方便 review 和回归。
+- `GET /api/admin/customers`
+- `POST /api/admin/customers`
+- `GET /api/admin/customers/:id`
+- `PATCH /api/admin/customers/:id`
+- `POST /api/admin/customers/:id/users`
+- `POST /api/admin/customers/:id/tokens`
+- `GET /api/admin/models`
+- `POST /api/admin/models`
+- `PATCH /api/admin/models/:id`
+- `GET /api/admin/token-usage`
+- `GET /api/admin/system`
 
-## 当前范围
+## Current Data Model
 
-已保留当前 V1 Demo 中的页面和交互：
+- `tenants` - customers/organizations
+- `users` - platform admins and tenant users
+- `sessions` - database sessions
+- `tenant_records` - first-version tenant business data
+- `ai_models` - platform model configs
+- `tenant_model_settings` - selected model per tenant
+- `tenant_token_balances` - tenant token quota and used tokens
+- `token_usage_logs` - token usage events
+- `token_adjustments` - admin token quota changes
+- `audit_logs` - important admin/auth actions
 
-- 首页快速开始
-- 聚合对话
-- AI 智能体
-- 对话渠道
-- 企业微信托管
-- 知识库
-- AI 流程
-- AI 微信营销
-- 联系人管理
-- 数据分析
-- 产品教学
-- 系统设置
-
-## 部署
-
-项目的前端仍可纯静态部署到 Vercel。内置 Node 后端用于本地真实演示；生产部署时建议将 `/api/conversations/*` 替换为正式服务。
-
-## 聚合对话 API 快速验证
+## Verification
 
 ```bash
-curl http://localhost:3000/api/health
-curl http://localhost:3000/api/conversations
-curl -X POST http://localhost:3000/api/conversations/group/messages \
-  -H 'Content-Type: application/json' \
-  -d '{"clientMessageId":"demo-1","content":"这是一条真实写入后端的人工消息"}'
+npm run lint
+npm run build
 ```
 
-运行后端 API 验收：
+For local API flow verification:
 
-```bash
-npm run test:api
-```
+1. Start dev server.
+2. Log in as platform admin.
+3. Create a customer.
+4. Create a tenant user.
+5. Log in as tenant user.
+6. Send a message from `/app`.
+7. Confirm `tenant_token_balances.used_tokens` and `token_usage_logs` changed.
 
-该脚本会自动启动一个临时后端，覆盖会话分页、消息发送幂等、消息分页、客户资料更新、状态、标签、托管、收藏、审计日志、快捷回复、工作时间和 webhook 入站消息。
+## Known TODO
 
-当前还覆盖：
-
-- 未登录请求被拒绝。
-- 只读用户无法发送消息。
-- 登录用户写入审计操作人。
-- SSE 实时事件会推送 webhook 入站消息。
+- Real model provider calls are not wired yet; `/api/app/chat` persists a message and estimates token usage.
+- Token usage currently uses a deterministic local estimator until provider `usage` fields are connected.
+- `tenant_records.payload` is intentionally generic for V1; high-frequency modules should later get dedicated tables.
+- SQLite local mode is not implemented; this branch currently requires PostgreSQL.
+- API key values are not stored in DB. Model rows store `apiKeyEnvName`, and secrets must live in `.env.local` or deployment secrets.
+- Static V1 Demo is still separate. A planned migration should move static modules into Next.js routes/components deliberately.
