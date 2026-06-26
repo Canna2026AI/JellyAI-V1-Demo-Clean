@@ -270,12 +270,46 @@ async function handleConversationResource(req, res, requestUrl, conversationId, 
         type: body.type || "text",
         text: body.content || body.text,
         meta: body.meta,
+        material: body.material,
+        externalMessageId: body.externalMessageId,
         auth: req.auth,
       });
       addAudit(store, conversationId, "message.create", { messageId: message.id, role: message.role }, req.auth);
       return { conversation, message };
     });
     publishConversationEvent({ type: "message.created", conversationId, actor: publicUser(req.auth.user), message: result.message, conversation: result.conversation });
+    sendJson(res, 201, result);
+    return;
+  }
+
+  if (action === "notes" && req.method === "GET") {
+    requirePermission(req, "conversations:read");
+    const store = readStore();
+    const conversation = findConversation(store, conversationId, req.auth);
+    if (!conversation) return sendJson(res, 404, { error: "not_found", message: "会话不存在" });
+    sendJson(res, 200, { notes: conversation.notes || [] });
+    return;
+  }
+
+  if (action === "notes" && req.method === "POST") {
+    requirePermission(req, "conversations:update");
+    const body = await readJsonBody(req);
+    const { result } = withStore((store) => {
+      const conversation = requireConversation(store, conversationId, req.auth);
+      if (!Array.isArray(conversation.notes)) conversation.notes = [];
+      const note = {
+        id: body.id || createId("note"),
+        text: validateText(body.text, "note"),
+        author: body.author || req.auth.user.agentName || currentAgentName,
+        createdAt: body.createdAt || timeLabel(),
+        createdAtIso: body.createdAtIso || new Date().toISOString(),
+      };
+      conversation.notes.push(note);
+      touchConversation(conversation);
+      addAudit(store, conversationId, "conversation.note", { noteId: note.id }, req.auth);
+      return { conversation, note };
+    });
+    publishConversationEvent({ type: "conversation.note", conversationId, actor: publicUser(req.auth.user), note: result.note, conversation: result.conversation });
     sendJson(res, 201, result);
     return;
   }
@@ -600,10 +634,12 @@ async function handleConversationWebhook(req, res, pathname) {
   const provider = decodeURIComponent(match[1]);
   const body = await readJsonBody(req);
   const { result } = withStore((store) => {
-    let conversation = body.conversationId ? store.conversations.find((item) => item.id === body.conversationId) : null;
+    let conversation = findMappedConversation(store, provider, body);
     if (!conversation) {
       conversation = createConversationFromWebhook(provider, body);
       store.conversations.unshift(conversation);
+    } else {
+      mergeMappedConversation(conversation, provider, body);
     }
     const message = appendMessage(conversation, {
       id: body.eventId || body.messageId,
@@ -611,6 +647,9 @@ async function handleConversationWebhook(req, res, pathname) {
       type: body.type || "text",
       text: body.text || body.content,
       meta: body.meta || `${provider} webhook`,
+      material: body.material,
+      externalMessageId: body.messageId || body.externalMessageId,
+      sender: body.sender || body.senderName,
     });
     conversation.unread = true;
     addAudit(store, conversation.id, "webhook.message", { provider, messageId: message.id }, null, "webhook");
@@ -740,6 +779,9 @@ function appendMessage(conversation, input) {
     status: role === "me" ? "sent" : "received",
   };
   if (input.meta) message.meta = String(input.meta);
+  if (input.material && typeof input.material === "object") message.material = input.material;
+  if (input.externalMessageId) message.externalMessageId = String(input.externalMessageId);
+  if (input.sender) message.sender = input.sender;
   conversation.messages.push(message);
   conversation.updatedAt = new Date().toISOString();
   if (role === "me") {
@@ -787,9 +829,53 @@ function getStatusColor(status) {
   return status === "已解决" || status === "AI接待" ? "green" : "orange";
 }
 
+function findMappedConversation(store, provider, body) {
+  if (body.conversationId) {
+    const byId = store.conversations.find((item) => item.id === body.conversationId);
+    if (byId) return byId;
+  }
+  const channelName = body.channel || providerChannel(provider);
+  const externalId = body.externalId || body.openId || body.userId || body.groupId || "";
+  const sourceId = body.sourceId || body.roomId || "";
+  const hostedAccountId = body.hostedAccountId || body.accountId || "";
+  return store.conversations.find((conversation) => {
+    if (conversation.channel !== channelName) return false;
+    if (externalId && conversation.externalId === externalId) return true;
+    if (sourceId && conversation.sourceId === sourceId && (!hostedAccountId || conversation.hostedAccountId === hostedAccountId)) return true;
+    return false;
+  });
+}
+
+function mergeMappedConversation(conversation, provider, body) {
+  const channelName = body.channel || providerChannel(provider);
+  conversation.channel = conversation.channel || channelName;
+  conversation.channelIcon = conversation.channelIcon || channelName.slice(0, 1);
+  conversation.sourceName = body.sourceName || conversation.sourceName || `${provider} 接入`;
+  conversation.sourceId = body.sourceId || body.roomId || conversation.sourceId;
+  conversation.hostedAccountId = body.hostedAccountId || body.accountId || conversation.hostedAccountId;
+  conversation.externalId = body.externalId || body.openId || body.userId || body.groupId || conversation.externalId;
+  conversation.provider = provider;
+  conversation.hosted = body.hosted === undefined ? conversation.hosted : Boolean(body.hosted);
+  if (Array.isArray(body.members)) conversation.members = normalizeWebhookMembers(body.members, conversation);
+  if (body.customerName || body.name || body.phone || body.company || body.city || body.remark) {
+    conversation.customer = {
+      ...(conversation.customer || {}),
+      name: body.customerName || body.name || conversation.customer?.name || conversation.name,
+      phone: body.phone || conversation.customer?.phone || "",
+      company: body.company || conversation.customer?.company || "",
+      city: body.city || conversation.customer?.city || "",
+      remark: body.remark || conversation.customer?.remark || `${channelName} 来访`,
+    };
+    conversation.name = conversation.customer.name || conversation.name;
+  }
+  conversation.viewTags = Array.from(new Set([...(conversation.viewTags || []), channelName, "未人工回复"]));
+  touchConversation(conversation);
+}
+
 function createConversationFromWebhook(provider, body) {
   const id = body.conversationId || createId(provider);
   const channelName = body.channel || providerChannel(provider);
+  const externalId = body.externalId || body.openId || body.userId || body.groupId || createId("external");
   return {
     id,
     tenantId: body.tenantId || "tenant-demo",
@@ -801,10 +887,11 @@ function createConversationFromWebhook(provider, body) {
     assignedToMe: false,
     channel: channelName,
     channelIcon: channelName.slice(0, 1),
+    provider,
     sourceName: body.sourceName || `${provider} 接入`,
-    sourceId: body.sourceId || createId("source"),
-    hostedAccountId: body.hostedAccountId || "-",
-    externalId: body.externalId || body.openId || createId("external"),
+    sourceId: body.sourceId || body.roomId || createId("source"),
+    hostedAccountId: body.hostedAccountId || body.accountId || "-",
+    externalId,
     hosted: true,
     status: "AI接待",
     statusColor: "green",
@@ -820,8 +907,47 @@ function createConversationFromWebhook(provider, body) {
       company: body.company || "",
       city: body.city || "",
     },
+    members: normalizeWebhookMembers(body.members, {
+      id,
+      name: body.customerName || body.name || "新访客",
+      avatar: String(body.customerName || provider || "客").slice(0, 1).toUpperCase(),
+      customer: { phone: body.phone || "", company: body.company || "", city: body.city || "", remark: body.remark || `${channelName} 来访` },
+      tags: [],
+    }),
+    notes: [],
     messages: [],
   };
+}
+
+function normalizeWebhookMembers(members, conversation) {
+  if (!Array.isArray(members) || !members.length) {
+    return [
+      {
+        id: `${conversation.id || "external"}-customer`,
+        name: conversation.customer?.name || conversation.name || "客户",
+        avatar: conversation.avatar || "客",
+        role: "客户",
+        company: conversation.customer?.company || "",
+        phone: conversation.customer?.phone || "",
+        city: conversation.customer?.city || "",
+        remark: conversation.customer?.remark || "",
+        tags: conversation.tags || [],
+        lastActive: "刚刚",
+      },
+    ];
+  }
+  return members.map((member, index) => ({
+    id: String(member.id || member.externalId || member.userId || `member-${index}`),
+    name: String(member.name || member.nickname || member.remark || `成员${index + 1}`),
+    avatar: String(member.avatar || member.name || member.nickname || "成").slice(0, 2),
+    role: String(member.role || "群成员"),
+    company: String(member.company || ""),
+    phone: String(member.phone || ""),
+    city: String(member.city || ""),
+    remark: String(member.remark || ""),
+    tags: Array.isArray(member.tags) ? uniqueStrings(member.tags) : [],
+    lastActive: String(member.lastActive || "刚刚"),
+  }));
 }
 
 function providerChannel(provider) {

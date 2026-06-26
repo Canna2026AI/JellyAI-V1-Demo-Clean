@@ -671,14 +671,18 @@ function markConversationRead(conversationId) {
 function addConversationMessage(conversationId, text, role = "me", meta = "") {
   const conversation = conversationData.find((item) => item.id === conversationId);
   if (!conversation) return null;
+  const options = typeof meta === "object" && meta !== null ? meta : { meta };
   const now = new Date();
   const message = {
     id: `msg-${Date.now()}`,
     role,
     text,
+    type: options.type || "text",
     createdAt: now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
   };
-  if (meta) message.meta = meta;
+  if (options.meta) message.meta = options.meta;
+  if (options.material) message.material = options.material;
+  if (options.externalStatus) message.externalStatus = options.externalStatus;
   conversation.messages.push(message);
   conversation.updatedAt = now.toISOString();
   conversation.status = role === "me" ? "解决中" : conversation.status;
@@ -692,9 +696,50 @@ function addConversationMessage(conversationId, text, role = "me", meta = "") {
     clientMessageId: message.id,
     content: text,
     role,
-    type: "text",
+    type: message.type,
+    meta: message.meta,
+    material: message.material,
   }));
   return message;
+}
+
+function addConversationNote(conversationId, text) {
+  const conversation = conversationData.find((item) => item.id === conversationId);
+  const clean = String(text || "").trim();
+  if (!conversation || !clean) return null;
+  if (!Array.isArray(conversation.notes)) conversation.notes = [];
+  const note = {
+    id: `note-${Date.now()}`,
+    text: clean,
+    author: currentAgentName,
+    createdAt: new Date().toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }),
+    createdAtIso: new Date().toISOString(),
+  };
+  conversation.notes.push(note);
+  conversation.updatedAt = new Date().toISOString();
+  saveConversationData({ skipBackendBulk: true });
+  syncConversationBackend(window.conversationService?.addNote(conversationId, note));
+  return note;
+}
+
+function sendConversationMaterial(conversationId, payload) {
+  const title = String(payload?.title || "").trim();
+  const url = String(payload?.url || "").trim();
+  const caption = String(payload?.caption || "").trim();
+  const type = String(payload?.type || "file").trim();
+  if (!title && !url && !caption) return null;
+  const text = caption || title || url;
+  const typeLabel = { image: "图片", file: "文件", link: "链接", video: "视频" }[type] || "素材";
+  return addConversationMessage(conversationId, text, "me", {
+    type,
+    meta: `${typeLabel}素材 · 已写入${getSelectedConversation()?.channel || "当前渠道"}发送队列`,
+    material: {
+      title: title || `${typeLabel}素材`,
+      url,
+      caption,
+    },
+    externalStatus: "queued",
+  });
 }
 
 function updateConversationStatus(conversationId, status) {

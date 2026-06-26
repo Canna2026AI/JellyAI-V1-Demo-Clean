@@ -331,6 +331,8 @@ function normalizeStore(store) {
   next.conversations.forEach((conversation) => {
     conversation.tenantId = conversation.tenantId || "tenant-demo";
     conversation.messages = Array.isArray(conversation.messages) ? conversation.messages : [];
+    conversation.notes = Array.isArray(conversation.notes) ? conversation.notes : [];
+    conversation.members = Array.isArray(conversation.members) ? conversation.members : [];
     conversation.viewTags = Array.isArray(conversation.viewTags) ? conversation.viewTags : [];
     conversation.tags = Array.isArray(conversation.tags) ? conversation.tags : [];
   });

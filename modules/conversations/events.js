@@ -243,22 +243,49 @@ function bindConversationListEvents() {
 }
 
 function bindConversationDetailEvents() {
+  document.querySelectorAll("[data-compose-mode]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.conversationComposeMode = el.dataset.composeMode || "reply";
+      setState({});
+    })
+  );
   document.querySelectorAll("[data-quick-insert]").forEach((el) => el.addEventListener("click", () => {
     const reply = quickMessageData.replies.find((item) => item.id === el.dataset.quickInsert);
-    const input = document.getElementById("convInput");
-    if (!reply || !input) return;
-    const prefix = input.value.trim() ? `${input.value.trim()}\n` : "";
-    input.value = `${prefix}${reply.content}`;
-    input.focus();
+    if (!reply) return;
+    insertReplyText(reply.content);
     showToast("快捷回复已插入");
   }));
   const convSend = document.getElementById("convSend");
   if (convSend) convSend.addEventListener("click", sendConvMessage);
+  const noteSave = document.getElementById("convNoteSave");
+  if (noteSave) noteSave.addEventListener("click", saveConversationNoteFromInput);
+  const materialSend = document.getElementById("convMaterialSend");
+  if (materialSend) materialSend.addEventListener("click", sendConversationMaterialFromInput);
+  document.querySelectorAll("[data-material-sample]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const type = document.getElementById("convMaterialType");
+      const title = document.getElementById("convMaterialTitle");
+      const url = document.getElementById("convMaterialUrl");
+      if (type) type.value = el.dataset.materialType || "file";
+      if (title) title.value = el.dataset.materialTitle || "";
+      if (url) url.value = el.dataset.materialUrl || "";
+      document.getElementById("convMaterialCaption")?.focus();
+      showToast("素材已选择");
+    })
+  );
   const input = document.getElementById("convInput");
   if (input) input.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.shiftKey) return;
+    if (!document.querySelector("[data-enter-to-send]")?.checked) return;
     event.preventDefault();
     sendConvMessage();
+  });
+  const noteInput = document.getElementById("convNoteInput");
+  if (noteInput) noteInput.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      saveConversationNoteFromInput();
+    }
   });
   document.querySelector("[data-cancel-ai-reply]")?.addEventListener("click", (event) => {
     cancelAiReply(event.currentTarget.dataset.cancelAiReply);
@@ -479,6 +506,20 @@ function insertEditorToken(type) {
   document.execCommand("insertText", false, snippets[type] || "");
 }
 
+function insertReplyText(content) {
+  if (state.conversationComposeMode !== "reply") {
+    state.conversationComposeMode = "reply";
+    setState({});
+    requestAnimationFrame(() => insertReplyText(content));
+    return;
+  }
+  const input = document.getElementById("convInput");
+  if (!input) return;
+  const prefix = input.value.trim() ? `${input.value.trim()}\n` : "";
+  input.value = `${prefix}${content}`;
+  input.focus();
+}
+
 function sendConvMessage() {
   const input = document.getElementById("convInput");
   const text = input?.value.trim();
@@ -492,6 +533,41 @@ function sendConvMessage() {
   input.value = "";
   showToast("消息已发送");
   setState({});
+  requestAnimationFrame(() => {
+    const box = document.querySelector(".conv-messages");
+    if (box) box.scrollTop = box.scrollHeight;
+  });
+}
+
+function saveConversationNoteFromInput() {
+  const input = document.getElementById("convNoteInput");
+  const text = input?.value.trim();
+  const conv = getSelectedConversation();
+  if (!input || !conv) return;
+  if (!text) {
+    showToast("请输入备注内容");
+    return;
+  }
+  addConversationNote(conv.id, text);
+  input.value = "";
+  showToast("备注已保存");
+  setState({});
+}
+
+function sendConversationMaterialFromInput() {
+  const conv = getSelectedConversation();
+  if (!conv) return;
+  const type = document.getElementById("convMaterialType")?.value || "file";
+  const title = document.getElementById("convMaterialTitle")?.value.trim() || "";
+  const url = document.getElementById("convMaterialUrl")?.value.trim() || "";
+  const caption = document.getElementById("convMaterialCaption")?.value.trim() || "";
+  if (!title && !url && !caption) {
+    showToast("请选择或填写素材");
+    return;
+  }
+  sendConversationMaterial(conv.id, { type, title, url, caption });
+  showToast(`${conv.channel} 素材消息已发送`);
+  setState({ conversationComposeMode: "reply" });
   requestAnimationFrame(() => {
     const box = document.querySelector(".conv-messages");
     if (box) box.scrollTop = box.scrollHeight;

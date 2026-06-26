@@ -1182,6 +1182,163 @@
   padding: 10px;
 }
 
+.conv-compose-tabs {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.conv-compose-tabs button {
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+}
+
+.conv-compose-tabs button:not(.active) {
+  color: #667085;
+  font-weight: 600;
+}
+
+.conv-compose-body textarea {
+  width: 100%;
+  height: 56px;
+  border: 0;
+  outline: 0;
+  resize: none;
+  color: #344054;
+  font-size: 14px;
+}
+
+.conv-compose-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #667085;
+}
+
+.conv-compose-foot label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.conv-compose-foot input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+}
+
+.conv-compose[data-compose-active-mode="note"],
+.conv-compose[data-compose-active-mode="material"] {
+  height: 168px;
+}
+
+.conv-compose[data-compose-active-mode="note"] .conv-compose-body textarea,
+.conv-compose[data-compose-active-mode="material"] .conv-compose-body textarea {
+  height: 40px;
+}
+
+.conversation-note-list {
+  max-height: 48px;
+  overflow: auto;
+  display: grid;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.conversation-note-list div {
+  padding: 5px 7px;
+  border-radius: 5px;
+  background: #f6f8fb;
+  color: #344054;
+  font-size: 12px;
+}
+
+.conversation-note-list b {
+  margin-right: 8px;
+}
+
+.conversation-note-list span,
+.conversation-note-list p {
+  color: #667085;
+}
+
+.conversation-note-list p {
+  margin: 2px 0 0;
+}
+
+.conversation-note-empty {
+  height: 22px;
+  margin-bottom: 6px;
+  color: #98a2b3;
+  font-size: 12px;
+}
+
+.material-compose-grid {
+  display: grid;
+  grid-template-columns: 80px minmax(120px, .8fr) minmax(160px, 1.2fr);
+  gap: 8px;
+}
+
+.material-compose-grid select,
+.material-compose-grid input {
+  min-width: 0;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 8px;
+  background: #fff;
+  outline: 0;
+}
+
+.material-samples {
+  display: flex;
+  gap: 8px;
+  margin: 7px 0 5px;
+  overflow-x: auto;
+}
+
+.material-samples button {
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid #d6dce6;
+  border-radius: 999px;
+  background: #fff;
+  color: #344054;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.material-samples button:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.material-message {
+  display: grid;
+  gap: 5px;
+}
+
+.material-message b {
+  color: #344054;
+}
+
+.material-message span,
+.material-message p {
+  color: #667085;
+  font-size: 12px;
+}
+
+.material-message p {
+  margin: 0;
+}
+
 .conv-info {
   border-right: 0;
   border-left: 1px solid var(--line);

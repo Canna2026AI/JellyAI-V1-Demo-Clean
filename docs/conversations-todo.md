@@ -79,8 +79,15 @@
 
 - `POST /api/conversations/:id/messages`
   - 发送人工消息。
-  - Body: `{ "clientMessageId": string, "content": string, "type": "text" | "image" | "file" }`.
+  - Body: `{ "clientMessageId": string, "content": string, "type": "text" | "image" | "file" | "link", "material": object }`.
   - Response: 新消息、更新后的会话摘要。
+
+- `GET /api/conversations/:id/notes`
+  - 查询会话内部备注。
+
+- `POST /api/conversations/:id/notes`
+  - 新增内部备注，不发送给外部客户。
+  - Body: `{ "text": string }`.
 
 - `PATCH /api/conversations/:id/status`
   - 更新会话状态。
@@ -128,14 +135,38 @@
   - 保存消息转发设置。
   - Body: `{ "enabled": boolean, "channel": string, "scope": string, "webhook": string }`.
 
+- `POST /api/conversations/webhooks/:provider/messages`
+  - 第三方渠道入站消息统一入口。
+  - Provider 示例：`wecom`, `wechat`, `douyin`, `redbook`, `website`。
+  - Body: `{ "conversationId"?: string, "externalId"?: string, "sourceId"?: string, "hostedAccountId"?: string, "customerName"?: string, "text": string, "type": string, "members"?: array }`.
+  - 映射规则：优先 `conversationId`，其次 `channel + externalId`，再次 `channel + sourceId + hostedAccountId`，未命中则创建新会话。
+
+- `POST /api/conversations/channels/:provider/sync`
+  - 生产环境建议增加批量同步入口，用于企业微信托管账号启动后拉取最近私聊、群聊、群成员和未读消息。
+  - Body: `{ "accountId": string, "cursor"?: string, "conversations": array }`.
+
 ## Database
 
 - `conversations`
   - `id`, `tenant_id`, `customer_id`, `channel`, `external_id`, `status`, `mode`, `assignee_id`, `hosted`, `unread_count`, `last_message_id`, `last_message_at`, `created_at`, `updated_at`.
 
 - `conversation_messages`
-  - `id`, `conversation_id`, `client_message_id`, `role`, `type`, `content`, `metadata`, `sender_id`, `external_message_id`, `created_at`.
+  - `id`, `conversation_id`, `client_message_id`, `role`, `type`, `content`, `material_json`, `metadata`, `sender_id`, `external_message_id`, `delivery_status`, `created_at`.
   - `client_message_id` 需要唯一索引，避免发送消息重试造成重复消息。
+
+- `conversation_notes`
+  - `id`, `conversation_id`, `author_id`, `content`, `created_at`, `updated_at`.
+  - 只对内部成员可见，不同步到外部渠道。
+
+- `channel_accounts`
+  - `id`, `tenant_id`, `provider`, `account_name`, `account_external_id`, `bot_id`, `status`, `last_heartbeat_at`, `config_json`, `created_at`, `updated_at`.
+
+- `channel_conversation_mappings`
+  - `id`, `tenant_id`, `provider`, `account_id`, `conversation_id`, `external_conversation_id`, `external_user_id`, `external_group_id`, `source_id`, `created_at`, `updated_at`.
+  - 需要唯一索引：`tenant_id + provider + account_id + external_conversation_id`。
+
+- `channel_members`
+  - `id`, `mapping_id`, `external_member_id`, `name`, `avatar_url`, `role`, `profile_json`, `last_active_at`.
 
 - `conversation_customers`
   - `id`, `tenant_id`, `name`, `phone`, `company`, `city`, `remark`, `external_profile`, `created_at`, `updated_at`.
@@ -163,6 +194,11 @@
 - 建议将会话模块拆为 `ConversationService`、`MessageService`、`QuickReplyService`、`ConversationSettingsService`。
 - 列表接口必须分页，默认 `limit=30`，最大不超过 `100`。
 - 发送消息接口需要先写入本地消息记录，再异步投递到渠道 SDK，失败时更新消息状态并返回可重试信息。
+- 企业微信或社交平台发送链路建议拆成：
+  - `ConversationMessageService.createLocalMessage`
+  - `ChannelDeliveryService.enqueue`
+  - `WeComBotAdapter.sendMessage`
+  - `MessageStatusWebhookHandler.updateDeliveryStatus`
 - 会话状态、转人工、标签、托管状态都需要写审计日志。
 - 真实时间排序应以服务端 `last_message_at` 为准，前端只展示相对时间。
 
@@ -171,6 +207,7 @@
 - `POST /webhooks/conversations/:provider`
   - 接收企业微信、微信客服、小红书、抖音、网站客服等外部渠道消息。
   - 必须验证签名、时间戳和重放窗口。
+  - 需要把外部 `roomId/openId/externalUserId/messageId` 映射到统一 `conversation_id`，避免重复开会话。
 
 - `POST /webhooks/conversations/message-status`
   - 接收渠道消息发送状态，如已发送、失败、撤回、被风控拦截。
@@ -183,10 +220,15 @@
 ## Third-Party SDK
 
 - 企业微信/微信客服 SDK：消息收发、客户资料、群信息、托管账号状态。
+  - 企业微信托管需要账号连接层，负责扫码登录、心跳、断线重连、群列表/成员列表/私聊列表同步。
+  - 机器人收到私聊或群聊消息后，统一转成 `POST /api/conversations/webhooks/wecom/messages` 的 payload。
+  - 人工从聚合对话发送消息时，后端先落库，再调用企业微信发送 SDK，把发送结果写回 `delivery_status`。
 - 小红书/抖音开放平台：私信、评论、账号授权、消息状态回调。
 - AI 服务 SDK：自动回复、总结、意图识别、敏感内容检测。
 - 通知 SDK：企业微信群机器人、邮件、Webhook 转发。
 - 所有 SDK 调用必须封装为 provider adapter，避免业务层直接依赖第三方对象。
+- 每个渠道都实现统一 `ChannelAdapter`：`pullConversations`, `sendMessage`, `sendMaterial`, `normalizeWebhook`, `verifySignature`。
+- 前端不直接碰渠道 SDK，只和统一 `/api/conversations/*` 通信。
 
 ## Object Storage
 
@@ -194,6 +236,7 @@
 - 表结构只保存 `file_key`、`mime_type`、`size`、`original_name`、`checksum`。
 - 下载或预览使用短期签名 URL。
 - 上传需要做文件大小、扩展名、MIME、病毒扫描和租户隔离。
+- 企业微信等渠道如果不接受公网 URL，需要后端下载后转渠道 `media_id`。
 
 ## Redis
 
@@ -202,6 +245,7 @@
 - WebSocket/SSE 在线状态：维护坐席在线、离线、忙碌状态。
 - 幂等键：`clientMessageId`、Webhook `eventId`。
 - 队列：消息投递、AI 回复、转发通知、附件扫描。
+- 队列任务必须支持重试、死信和人工重发。
 - 分布式锁：同一会话的状态迁移和转人工操作。
 
 ## Permissions
@@ -216,6 +260,7 @@
   - 管理快捷回复
   - 管理工作时间和自动化设置
   - 查看审计日志
+- 建议权限编码：`conversations:read`, `conversations:message`, `conversations:note`, `conversations:assign`, `conversations:update`, `channels:manage`, `channels:send`, `materials:upload`。
 
 - 自定义视图需要保存可见范围：全员、角色、成员。
 - 所有查询必须加 `tenant_id` 和权限过滤，不能只在前端隐藏。

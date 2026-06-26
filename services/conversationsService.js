@@ -92,6 +92,7 @@ window.conversationService = (() => {
     saveConversations: (conversations) => sync("", json("PUT", { conversations })),
     markRead: (conversationId, unread = false) => sync(`/${encodeURIComponent(conversationId)}/read`, json("PATCH", { unread })),
     sendMessage: (conversationId, payload) => sync(`/${encodeURIComponent(conversationId)}/messages`, json("POST", payload)),
+    addNote: (conversationId, payload) => sync(`/${encodeURIComponent(conversationId)}/notes`, json("POST", payload)),
     updateConversation: (conversationId, patch) => sync(`/${encodeURIComponent(conversationId)}`, json("PATCH", patch)),
     updateCustomer: (conversationId, patch) => sync(`/${encodeURIComponent(conversationId)}/customer`, json("PATCH", patch)),
     updateStatus: (conversationId, status) => sync(`/${encodeURIComponent(conversationId)}/status`, json("PATCH", { status })),
@@ -105,6 +106,7 @@ window.conversationService = (() => {
     saveWorkHours: (settings) => sync("/settings/worktime", json("PATCH", settings)),
     saveAutomation: (settings) => sync("/settings/automation", json("PATCH", settings)),
     saveForwarding: (settings) => sync("/settings/forwarding", json("PATCH", settings)),
+    ingestChannelMessage: (provider, payload) => sync(`/webhooks/${encodeURIComponent(provider)}/messages`, json("POST", payload)),
     subscribe: (onEvent) => {
       if (!backendOnline || !window.EventSource) return null;
       if (eventSource) eventSource.close();

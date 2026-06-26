@@ -319,11 +319,7 @@ function renderConversationDetail() {
           ${quickMessageData.replies.slice(0, 4).map((reply) => `<button type="button" data-quick-insert="${reply.id}">${escapeHtml(reply.title)}</button>`).join("")}
           <button type="button" data-modal="quickReply">＋ 新增</button>
         </div>
-        <div class="conv-compose">
-          <div style="display:flex; gap:16px; color:var(--blue); margin-bottom:8px"><b>回复</b><span>备注</span><span>📎发送素材</span></div>
-          <textarea id="convInput" placeholder="请输入对话内容" style="width:100%; height:56px; border:0; outline:0; resize:none"></textarea>
-          <div style="display:flex; justify-content:space-between"><span class="subtle">□ Enter 发送模拟人工消息</span><button class="button primary small" id="convSend">➤</button></div>
-        </div>
+        ${renderConversationCompose(conv)}
   `;
 }
 
@@ -334,6 +330,57 @@ function renderAiReplyBar(conv) {
     <span class="ai-reply-dot"></span>
     <div><b>AI 正在替你回复</b><span>将根据客户最后一句“${escapeHtml(preview)}”自动继续接待</span></div>
     <button type="button" data-cancel-ai-reply="${conv.id}" title="取消 AI 代答">×</button>
+  </div>`;
+}
+
+function renderConversationCompose(conv) {
+  const mode = state.conversationComposeMode || "reply";
+  return `<div class="conv-compose" data-compose-active-mode="${mode}">
+    <div class="conv-compose-tabs" role="tablist" aria-label="对话输入类型">
+      <button class="${mode === "reply" ? "active" : ""}" type="button" data-compose-mode="reply">回复</button>
+      <button class="${mode === "note" ? "active" : ""}" type="button" data-compose-mode="note">备注</button>
+      <button class="${mode === "material" ? "active" : ""}" type="button" data-compose-mode="material">📎发送素材</button>
+    </div>
+    ${mode === "note" ? renderConversationNoteComposer(conv) : mode === "material" ? renderConversationMaterialComposer(conv) : renderConversationReplyComposer(conv)}
+  </div>`;
+}
+
+function renderConversationReplyComposer(conv) {
+  const hint = conv.hosted ? `Enter 发送到 ${conv.channel} 映射队列` : "Enter 发送模拟人工消息";
+  return `<div class="conv-compose-body">
+    <textarea id="convInput" placeholder="请输入对话内容" aria-label="回复内容"></textarea>
+    <div class="conv-compose-foot"><label><input type="checkbox" data-enter-to-send checked> ${escapeHtml(hint)}</label><button class="button primary small" id="convSend">➤</button></div>
+  </div>`;
+}
+
+function renderConversationNoteComposer(conv) {
+  const notes = Array.isArray(conv.notes) ? conv.notes.slice(-3).reverse() : [];
+  return `<div class="conv-compose-body note-mode">
+    ${notes.length ? `<div class="conversation-note-list">${notes.map((note) => `<div><b>${escapeHtml(note.author || currentAgentName)}</b><span>${escapeHtml(note.createdAt || "刚刚")}</span><p>${escapeHtml(note.text)}</p></div>`).join("")}</div>` : `<div class="conversation-note-empty">暂无内部备注</div>`}
+    <textarea id="convNoteInput" placeholder="添加内部备注，仅团队可见，不会发送给客户" aria-label="内部备注"></textarea>
+    <div class="conv-compose-foot"><span class="subtle">备注会保存到当前会话，不会同步到外部客户</span><button class="button primary small" id="convNoteSave">保存</button></div>
+  </div>`;
+}
+
+function renderConversationMaterialComposer(conv) {
+  const samples = [
+    ["price-sheet", "报价表", "file", "欧洲海运报价表.pdf", "https://example.com/materials/eu-sea-price.pdf"],
+    ["route-image", "线路图", "image", "欧洲海运线路图.png", "https://example.com/materials/eu-sea-route.png"],
+    ["booking-link", "预约链接", "link", "客户报价信息收集表", "https://example.com/forms/quote"],
+  ];
+  return `<div class="conv-compose-body material-mode">
+    <div class="material-compose-grid">
+      <select id="convMaterialType" aria-label="素材类型">
+        ${["file", "image", "link"].map((type) => `<option value="${type}">${{ file: "文件", image: "图片", link: "链接" }[type]}</option>`).join("")}
+      </select>
+      <input id="convMaterialTitle" placeholder="素材名称" value="${conv.channel.includes("企业微信") ? "企业微信资料卡片" : ""}" aria-label="素材名称">
+      <input id="convMaterialUrl" placeholder="素材链接或文件地址" aria-label="素材链接">
+    </div>
+    <div class="material-samples">
+      ${samples.map(([id, label, type, title, url]) => `<button type="button" data-material-sample="${id}" data-material-type="${type}" data-material-title="${escapeHtml(title)}" data-material-url="${escapeHtml(url)}">${escapeHtml(label)}</button>`).join("")}
+    </div>
+    <textarea id="convMaterialCaption" placeholder="可选：附加说明，会随素材一起发送"></textarea>
+    <div class="conv-compose-foot"><span class="subtle">${escapeHtml(conv.channel)} · 将作为素材消息写入当前会话</span><button class="button primary small" id="convMaterialSend">发送</button></div>
   </div>`;
 }
 
@@ -417,11 +464,24 @@ function renderConvBubble(m) {
   const align = m.role === "me" || m.role === "ai" ? "user" : "";
   const roleLabel = { me: "人工", ai: "AI", customer: "客户", other: "客户" }[m.role] || "客户";
   const icon = m.role === "customer" || m.role === "other" ? "客" : m.role === "me" ? "K" : "AI";
+  const body = m.type && m.type !== "text" ? renderMaterialMessageBody(m) : escapeHtml(m.text);
   return `<div class="message ${align}">
     ${iconBox(icon)}
     <div>
       <div class="message-role ${m.role}">${roleLabel}${m.createdAt ? `<span>${escapeHtml(m.createdAt)}</span>` : ""}</div>
-      <div class="bubble">${escapeHtml(m.text)}${m.meta ? `<div class="bubble-meta">${escapeHtml(m.meta)}</div>` : ""}</div>
+      <div class="bubble">${body}${m.meta ? `<div class="bubble-meta">${escapeHtml(m.meta)}</div>` : ""}</div>
     </div>
+  </div>`;
+}
+
+function renderMaterialMessageBody(message) {
+  const material = message.material || {};
+  const title = material.title || message.text || "素材消息";
+  const typeLabel = { image: "图片", file: "文件", link: "链接", video: "视频" }[message.type] || "素材";
+  const url = material.url || "";
+  return `<div class="material-message">
+    <b>${escapeHtml(typeLabel)} · ${escapeHtml(title)}</b>
+    ${url ? `<span>${escapeHtml(url)}</span>` : ""}
+    ${message.text && message.text !== title ? `<p>${escapeHtml(message.text)}</p>` : ""}
   </div>`;
 }
