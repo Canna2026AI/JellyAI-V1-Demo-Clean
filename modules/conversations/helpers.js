@@ -24,8 +24,11 @@ const conversationStorageKey = "jelly-ai-conversations";
 const workHoursStorageKey = "jelly-ai-conversation-work-hours";
 const automationSettingsStorageKey = "jelly-ai-conversation-automation-settings";
 const forwardSettingsStorageKey = "jelly-ai-conversation-forward-settings";
+const aiReplyCancelStorageKey = "jelly-ai-conversation-ai-reply-cancelled";
 
 const currentAgentName = "Kelvin";
+const aiReplyTimers = {};
+const aiReplyCancelled = new Set(readJsonStorage(aiReplyCancelStorageKey, []));
 
 const defaultQuickMessageData = {
   groups: [
@@ -69,6 +72,13 @@ const defaultConversationData = [
       company: "欧诚国际物流",
       city: "深圳",
     },
+    members: [
+      { id: "gm-kelvin", name: "Kelvin", avatar: "K", role: "群主", company: "JellyAI", phone: "13828821846", city: "深圳", remark: "当前跟进人", tags: ["内部坐席"], lastActive: "刚刚" },
+      { id: "gm-canna", name: "Canna郑", avatar: "C", role: "客户", company: "欧诚国际物流", phone: "13900139002", city: "广州", remark: "海运报价需求", tags: ["高意向", "海运询价"], lastActive: "3分钟前" },
+      { id: "gm-wang", name: "王丽", avatar: "王", role: "客户", company: "集简云", phone: "13700137003", city: "杭州", remark: "对接负责人", tags: ["系统对接"], lastActive: "12分钟前" },
+      { id: "gm-liu", name: "刘浩", avatar: "刘", role: "客户", company: "欧诚国际物流", phone: "13600136004", city: "义乌", remark: "价格确认", tags: ["待报价"], lastActive: "1小时前" },
+      { id: "gm-ai", name: "物流客服助手", avatar: "AI", role: "AI助手", company: "JellyAI", phone: "-", city: "云端", remark: "自动回复物流问题", tags: ["AI接待"], lastActive: "在线" },
+    ],
     messages: [
       { id: "m-1", role: "customer", text: "@郑楚佳 促销-欧洲海运普船(卡派)时效", createdAt: "09:18" },
       {
@@ -119,6 +129,10 @@ const defaultConversationData = [
       company: "个人客户",
       city: "广州",
     },
+    members: [
+      { id: "canna-visitor", name: "Canna郑", avatar: "C", role: "访客", company: "个人客户", phone: "13900139002", city: "广州", remark: "官网报价咨询", tags: ["报价咨询"], lastActive: "刚刚" },
+      { id: "canna-ai", name: "物流客服助手", avatar: "AI", role: "AI助手", company: "JellyAI", phone: "-", city: "云端", remark: "正在接待该访客", tags: ["AI接待"], lastActive: "在线" },
+    ],
     messages: [
       { id: "m-7", role: "customer", text: "你好，你们可以做德国海运吗？", createdAt: "03:58" },
       { id: "m-8", role: "ai", text: "您好，我可以为您解答物流相关的问题。德国海运可以做，请问货物重量、体积和目的城市是哪里？", meta: "命中：物流问答知识库", createdAt: "03:59" },
@@ -154,6 +168,10 @@ const defaultConversationData = [
       company: "跨境卖家",
       city: "杭州",
     },
+    members: [
+      { id: "demo-contact", name: "演示联系人", avatar: "演", role: "客户", company: "跨境卖家", phone: "13700137003", city: "杭州", remark: "预约演示", tags: ["演示预约"], lastActive: "昨天" },
+      { id: "demo-ai", name: "演示助手", avatar: "AI", role: "AI助手", company: "JellyAI", phone: "-", city: "云端", remark: "已完成自动接待", tags: ["已解决"], lastActive: "昨天" },
+    ],
     messages: [
       { id: "m-10", role: "customer", text: "想看一下你们的客服系统演示", createdAt: "20:48" },
       { id: "m-11", role: "ai", text: "好的，您可以点击链接预约演示，咨询报价也可以直接在这里留言。", meta: "AI 自动回复", createdAt: "20:49" },
@@ -189,6 +207,10 @@ const defaultConversationData = [
       company: "直播电商",
       city: "义乌",
     },
+    members: [
+      { id: "dy-8821", name: "抖音用户 8821", avatar: "抖", role: "客户", company: "直播电商", phone: "13600136004", city: "义乌", remark: "法国发货询价", tags: ["待报价"], lastActive: "1分钟前" },
+      { id: "dy-kelvin", name: "Kelvin", avatar: "K", role: "坐席", company: "JellyAI", phone: "13828821846", city: "深圳", remark: "当前人工跟进", tags: ["内部坐席"], lastActive: "在线" },
+    ],
     messages: [
       { id: "m-13", role: "customer", text: "我有一批货要发法国，能报个价吗", createdAt: "10:36" },
       { id: "m-14", role: "system", text: "命中转人工意图：询价", createdAt: "10:37" },
@@ -424,6 +446,131 @@ function getSelectedConversation() {
   return conversationData.find((item) => item.id === state.selectedConversation) || null;
 }
 
+function getConversationMembers(conversation) {
+  if (!conversation) return [];
+  if (Array.isArray(conversation.members) && conversation.members.length) return conversation.members;
+  return [
+    {
+      id: `${conversation.id}-customer`,
+      name: conversation.customer?.name || conversation.name,
+      avatar: conversation.avatar || "客",
+      role: conversation.channel?.includes("群") ? "群成员" : "客户",
+      company: conversation.customer?.company || "-",
+      phone: conversation.customer?.phone || "-",
+      city: conversation.customer?.city || "-",
+      remark: conversation.customer?.remark || conversation.channel,
+      tags: conversation.tags || [],
+      lastActive: getConversationTimeLabel(conversation),
+    },
+    {
+      id: `${conversation.id}-assignee`,
+      name: conversation.assignee || currentAgentName,
+      avatar: (conversation.assignee || currentAgentName).slice(0, 2),
+      role: conversation.type === "ai" ? "AI助手" : "坐席",
+      company: "JellyAI",
+      phone: "-",
+      city: "云端",
+      remark: conversation.type === "ai" ? "自动接待中" : "人工跟进中",
+      tags: [conversation.status],
+      lastActive: conversation.assignee === "AI" ? "在线" : "刚刚",
+    },
+  ];
+}
+
+function getFilteredConversationMembers(conversation) {
+  const query = String(state.conversationMemberSearch || "").trim().toLowerCase();
+  const members = getConversationMembers(conversation);
+  if (!query) return members;
+  return members.filter((member) =>
+    [member.name, member.role, member.company, member.phone, member.city, member.remark, ...(member.tags || [])]
+      .map((value) => String(value || "").toLowerCase())
+      .some((value) => value.includes(query))
+  );
+}
+
+function getSelectedConversationMember(conversation) {
+  const members = getConversationMembers(conversation);
+  return members.find((member) => member.id === state.selectedConversationMember) || members[0] || null;
+}
+
+function updateConversationMemberTag(conversationId, memberId, tag) {
+  const conversation = conversationData.find((item) => item.id === conversationId);
+  if (!conversation) return false;
+  if (!Array.isArray(conversation.members) || !conversation.members.length) {
+    conversation.members = getConversationMembers(conversation);
+  }
+  const member = conversation.members.find((item) => item.id === memberId);
+  if (!member) return false;
+  if (!Array.isArray(member.tags)) member.tags = [];
+  if (member.tags.includes(tag)) {
+    member.tags = member.tags.filter((item) => item !== tag);
+  } else {
+    member.tags.push(tag);
+  }
+  saveConversationData();
+  return true;
+}
+
+function shouldShowAiReplyBanner(conversation) {
+  if (!conversation) return false;
+  const last = getConversationLastMessage(conversation);
+  return (conversation.type === "ai" || conversation.status === "AI接待") && last?.role === "customer" && !aiReplyCancelled.has(conversation.id);
+}
+
+function saveAiReplyCancelled() {
+  writeJsonStorage(aiReplyCancelStorageKey, Array.from(aiReplyCancelled));
+}
+
+function cancelAiReply(conversationId) {
+  const conversation = conversationData.find((item) => item.id === conversationId);
+  if (!conversation) return;
+  window.clearTimeout(aiReplyTimers[conversationId]);
+  delete aiReplyTimers[conversationId];
+  aiReplyCancelled.add(conversationId);
+  saveAiReplyCancelled();
+  conversation.type = "manual";
+  conversation.assignee = currentAgentName;
+  conversation.assignedToMe = true;
+  conversation.status = "待跟进";
+  conversation.statusColor = "orange";
+  if (!conversation.viewTags.includes("未人工回复")) conversation.viewTags.push("未人工回复");
+  conversation.messages.push({ id: `sys-${Date.now()}`, role: "system", text: "已取消 AI 自动代答，等待人工处理", createdAt: "刚刚" });
+  conversation.updatedAt = new Date().toISOString();
+  saveConversationData();
+}
+
+function queueAiAutoReply(conversationId) {
+  const conversation = conversationData.find((item) => item.id === conversationId);
+  if (!shouldShowAiReplyBanner(conversation) || aiReplyTimers[conversationId]) return;
+  aiReplyTimers[conversationId] = window.setTimeout(() => {
+    delete aiReplyTimers[conversationId];
+    const activeConversation = conversationData.find((item) => item.id === conversationId);
+    if (!shouldShowAiReplyBanner(activeConversation)) return;
+    const last = getConversationLastMessage(activeConversation);
+    const text = buildAiAutoReplyText(activeConversation, last?.text || "");
+    addConversationMessage(conversationId, text, "ai", "AI 自动接待 · 可点击取消后转人工");
+    if (state.selectedConversation === conversationId) {
+      showToast("AI 已自动回复客户");
+      setState({});
+      requestAnimationFrame(() => {
+        const box = document.querySelector(".conv-messages");
+        if (box) box.scrollTop = box.scrollHeight;
+      });
+    }
+  }, 12000);
+}
+
+function buildAiAutoReplyText(conversation, lastText) {
+  const text = String(lastText || "");
+  if (/100kg|报价|价格|运费|多少钱/.test(text)) {
+    return "可以的。请再补充目的城市、件数、体积和地址类型，我会先按 100kg 为您整理参考价，并标注海运时效与派送注意事项。";
+  }
+  if (/成员|群|联系人/.test(text)) {
+    return "我已经记录您的群成员诉求，可以在右侧联系人区域查看成员资料，并继续补充需要跟进的人。";
+  }
+  return `收到，我会继续围绕“${conversation.name}”跟进。请补充目的地、货物重量/体积和期望时效，我会整理下一步回复。`;
+}
+
 function getConversationMessages(conversation) {
   return conversation?.messages || [];
 }
@@ -509,6 +656,10 @@ function getConversationStatuses() {
   return ["全部状态", ...Array.from(new Set(conversationData.map((item) => item.status)))];
 }
 
+function getConversationStatusColor(status) {
+  return status === "已解决" || status === "AI接待" ? "green" : "orange";
+}
+
 function markConversationRead(conversationId) {
   const conversation = conversationData.find((item) => item.id === conversationId);
   if (!conversation) return;
@@ -517,7 +668,7 @@ function markConversationRead(conversationId) {
   syncConversationBackend(window.conversationService?.markRead(conversationId, false));
 }
 
-function addConversationMessage(conversationId, text, role = "me") {
+function addConversationMessage(conversationId, text, role = "me", meta = "") {
   const conversation = conversationData.find((item) => item.id === conversationId);
   if (!conversation) return null;
   const now = new Date();
@@ -527,10 +678,11 @@ function addConversationMessage(conversationId, text, role = "me") {
     text,
     createdAt: now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
   };
+  if (meta) message.meta = meta;
   conversation.messages.push(message);
   conversation.updatedAt = now.toISOString();
   conversation.status = role === "me" ? "解决中" : conversation.status;
-  conversation.statusColor = conversation.status === "已解决" ? "green" : "orange";
+  conversation.statusColor = getConversationStatusColor(conversation.status);
   conversation.type = role === "me" ? "manual" : conversation.type;
   conversation.assignee = role === "me" ? currentAgentName : conversation.assignee;
   conversation.assignedToMe = role === "me" ? true : conversation.assignedToMe;
@@ -549,7 +701,7 @@ function updateConversationStatus(conversationId, status) {
   const conversation = conversationData.find((item) => item.id === conversationId);
   if (!conversation) return;
   conversation.status = status;
-  conversation.statusColor = status === "已解决" ? "green" : "orange";
+  conversation.statusColor = getConversationStatusColor(status);
   conversation.messages.push({ id: `sys-${Date.now()}`, role: "system", text: `会话状态已更新为：${status}`, createdAt: "刚刚" });
   conversation.updatedAt = new Date().toISOString();
   saveConversationData({ skipBackendBulk: true });
