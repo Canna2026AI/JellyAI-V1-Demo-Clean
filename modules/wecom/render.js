@@ -120,7 +120,7 @@ function renderChannelAccounts() {
       </table>
     </div>
     <div class="status-grid wechat-status-grid">
-      ${stats.map(([label, value, cls]) => `<div class="metric"><div class="subtle">${label}</div><div class="metric-value">${value}</div><span class="tag ${cls}">本地模拟</span></div>`).join("")}
+      ${stats.map(([label, value, cls]) => `<div class="metric"><div class="subtle">${label}</div><div class="metric-value">${value}</div><span class="tag ${cls}">后端同步</span></div>`).join("")}
     </div>
     <div class="member-toolbar wechat-filter-bar">
       <input class="input" data-wechat-filter="wechatAccountFilter" placeholder="请输入账号名称 / ID" value="${escapeHtml(state.wechatAccountFilter)}" />
@@ -300,7 +300,7 @@ function renderRobotConsole() {
       </div>
       <div class="card">
         <h3>执行结果</h3>
-        ${logs.map((l, i) => `<div class="log-line"><span class="dot" style="${i === 0 && logs.length === 1 ? "background:#cbd5e1" : ""}"></span><div>${escapeHtml(l)}<div class="subtle">${logs.length > 1 ? `taskId: ${escapeHtml(state.consoleTaskId || "MOCK-PENDING")}` : ""}</div></div></div>`).join("")}
+        ${logs.map((l, i) => `<div class="log-line"><span class="dot" style="${i === 0 && logs.length === 1 ? "background:#cbd5e1" : ""}"></span><div>${escapeHtml(l)}<div class="subtle">${logs.length > 1 ? `taskId: ${escapeHtml(state.consoleTaskId || "TASK-PENDING")}` : ""}</div></div></div>`).join("")}
       </div>
     </div>`;
 }

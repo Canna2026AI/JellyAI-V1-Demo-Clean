@@ -1,7 +1,54 @@
-// WeCom mock service facade. All operations are local mock mutations.
+// WeCom service facade. It hydrates from the backend when available and keeps a local fallback for static previews.
 (function initWecomService() {
+  let apiHydrationStarted = false;
+  let apiAvailable = false;
+
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function applyBackendState(payload) {
+    if (!payload) return;
+    state.wecomAssistants = payload.assistants || state.wecomAssistants;
+    state.wecomAccountGroups = payload.accountGroups || state.wecomAccountGroups;
+    state.wecomContacts = payload.contacts || state.wecomContacts;
+    state.wecomTeamMembers = payload.teamMembers || state.wecomTeamMembers;
+    state.wecomAccounts = payload.accounts || state.wecomAccounts;
+    state.wecomRules = payload.rules || state.wecomRules;
+    state.wecomAdvancedSettings = payload.advancedSettings || state.wecomAdvancedSettings;
+    state.wecomSidebarMenus = payload.sidebarMenus || state.wecomSidebarMenus;
+    state.wecomSelectedMemberIds = payload.selectedMemberIds || state.wecomSelectedMemberIds;
+    state.wecomGroups = payload.groups || state.wecomGroups;
+    state.wecomLogs = payload.logs || state.wecomLogs;
+    state.wecomConsoleTasks = payload.consoleTasks || state.wecomConsoleTasks || [];
+    state.__wecomBackendHydrated = true;
+  }
+
+  function hydrateFromBackend() {
+    if (apiHydrationStarted || !window.wecomApi) return;
+    apiHydrationStarted = true;
+    window.wecomApi.bootstrap()
+      .then((payload) => {
+        apiAvailable = true;
+        applyBackendState(payload);
+        if (state.page === "wechat") render();
+      })
+      .catch(() => {
+        apiAvailable = false;
+      });
+  }
+
+  function persist(path, method, body, onSuccess) {
+    if (!apiAvailable || !window.wecomApi) return;
+    const call = method === "POST" ? window.wecomApi.post : method === "PATCH" ? window.wecomApi.patch : method === "DELETE" ? window.wecomApi.delete : window.wecomApi.get;
+    call(path, body)
+      .then((payload) => {
+        if (onSuccess) onSuccess(payload);
+      })
+      .catch((error) => {
+        console.warn(`WeCom API ${method} ${path} failed: ${error.message}`);
+        showToast("后端同步失败，已保留本地演示状态");
+      });
   }
 
   function ensureState() {
@@ -46,6 +93,7 @@
       wecomLoading: state.wecomLoading || {},
       consoleStatus: state.consoleStatus || [],
     });
+    hydrateFromBackend();
   }
 
   function nextNumber(items, prefix, base) {
@@ -87,7 +135,7 @@
       content: "-",
       reply: "-",
       status: "成功",
-      detail: "Mock 操作记录",
+      detail: "操作记录",
       ...partial,
     });
   }
@@ -135,7 +183,7 @@
       id: String(nextNumber(state.wecomAccounts, "", 8021)),
       avatar: "企",
       accountId: `WeCom-${Date.now().toString().slice(-5)}`,
-      instanceId: `mock-${Date.now()}`,
+      instanceId: `managed-${Date.now()}`,
       status: "在线",
       heartbeat: "刚刚",
       messageEnabled: true,
@@ -151,6 +199,11 @@
       content: `${account.name} / ${account.group}`,
       reply: `绑定助手：${account.assistant}`,
       detail: "账号配置已保存",
+    });
+    persist(id ? `/api/wecom/accounts/${encodeURIComponent(id)}` : "/api/wecom/accounts", id ? "PATCH" : "POST", payload, (remote) => {
+      state.wecomAccounts = state.wecomAccounts.filter((item) => item.id !== account.id && item.id !== remote.id);
+      state.wecomAccounts.unshift(remote);
+      if (state.page === "wechat") render();
     });
     return account;
   }
@@ -168,8 +221,9 @@
       target: account.name,
       content: "删除账号",
       reply: "相关规则已停用",
-      detail: "Mock 删除完成",
+      detail: "删除完成",
     });
+    persist(`/api/wecom/accounts/${encodeURIComponent(id)}`, "DELETE");
     return account;
   }
 
@@ -184,9 +238,10 @@
       accountId: id,
       target: account.name,
       content: `状态切换为 ${status}`,
-      reply: "Mock 状态更新完成",
+      reply: "状态更新完成",
       detail: account.lastAction,
     });
+    persist(`/api/wecom/accounts/${encodeURIComponent(id)}`, "PATCH", account);
     return account;
   }
 
@@ -195,6 +250,7 @@
     if (!account) return null;
     account[field] = !account[field];
     account.lastAction = `${field === "messageEnabled" ? "消息接收" : "AI回复"}${account[field] ? "开启" : "关闭"}`;
+    persist(`/api/wecom/accounts/${encodeURIComponent(id)}`, "PATCH", { [field]: account[field] });
     return account;
   }
 
@@ -223,6 +279,11 @@
       reply: `绑定 ${rule.assistant}`,
       detail: `最大回复 ${rule.maxReplies} 次`,
     });
+    persist(id ? `/api/wecom/rules/${encodeURIComponent(id)}` : "/api/wecom/rules", id ? "PATCH" : "POST", payload, (remote) => {
+      state.wecomRules = state.wecomRules.filter((item) => item.id !== rule.id && item.id !== remote.id);
+      state.wecomRules.unshift(remote);
+      if (state.page === "wechat") render();
+    });
     return rule;
   }
 
@@ -235,9 +296,10 @@
       accountId: rule.accountId,
       target: rule.name,
       content: "删除规则",
-      reply: "Mock 删除完成",
+      reply: "删除完成",
       detail: "规则已移除",
     });
+    persist(`/api/wecom/rules/${encodeURIComponent(id)}`, "DELETE");
     return rule;
   }
 
@@ -245,6 +307,7 @@
     const rule = getRule(id);
     if (!rule) return null;
     rule[field] = !rule[field];
+    persist(`/api/wecom/rules/${encodeURIComponent(id)}`, "PATCH", { [field]: rule[field] });
     return rule;
   }
 
@@ -260,8 +323,12 @@
     addLog({
       operation: "恢复高级设置",
       content: "恢复默认设置",
-      reply: "Mock 默认值已应用",
+      reply: "默认值已应用",
       detail: "高级设置",
+    });
+    persist("/api/wecom/settings/reset", "POST", {}, (settings) => {
+      state.wecomAdvancedSettings = settings;
+      if (state.page === "wechat") render();
     });
   }
 
@@ -272,6 +339,7 @@
       reply: state.wecomAdvancedSettings.triggerMode,
       detail: "高级设置已保存",
     });
+    persist("/api/wecom/settings", "PATCH", state.wecomAdvancedSettings);
   }
 
   function listGroups() {
@@ -284,6 +352,7 @@
     const group = getGroup(id);
     if (!group) return null;
     group[field] = !group[field];
+    persist(`/api/wecom/groups/${encodeURIComponent(id)}`, "PATCH", { [field]: group[field] });
     return group;
   }
 
@@ -311,7 +380,11 @@
       type: "群聊",
       content: "同步群列表",
       reply: exists ? "群列表已是最新" : "新增 1 个群聊",
-      detail: "Mock 同步完成",
+      detail: "同步完成",
+    });
+    persist("/api/wecom/groups/sync", "POST", {}, (payload) => {
+      if (payload.groups) state.wecomGroups = payload.groups;
+      if (state.page === "wechat") render();
     });
     return exists ? 0 : 1;
   }
@@ -332,7 +405,24 @@
       reply: `已保存 ${selected.length} 个成员`,
       detail: "小组成员配置",
     });
+    persist("/api/wecom/account-groups/gs4758/members", "PATCH", { memberIds: state.wecomSelectedMemberIds });
     return selected.length;
+  }
+
+  function saveSidebarMenus(menus) {
+    state.wecomSidebarMenus = menus;
+    addLog({
+      operation: "保存自定义侧边栏",
+      target: "企业微信侧边栏",
+      content: menus.join(", "),
+      reply: "侧边栏配置已保存",
+      detail: "侧边栏",
+    });
+    persist("/api/wecom/sidebar", "PATCH", { menus }, (payload) => {
+      state.wecomSidebarMenus = payload.menus || menus;
+      if (state.page === "wechat") render();
+    });
+    return state.wecomSidebarMenus;
   }
 
   function runWorkbenchAction(action) {
@@ -350,15 +440,16 @@
       target: action,
       content: action,
       reply: routeMap[action] || "操作已记录",
-      detail: "工作台 Mock 入口",
+      detail: "工作台入口",
     });
+    persist("/api/wecom/workbench/actions", "POST", { action });
     return routeMap[action] || "操作已记录";
   }
 
   function runConsole(payload) {
     const account = getAccount(payload.accountId) || state.wecomAccounts[0];
     const target = payload.targetName || payload.targetId || "未选择目标";
-    const taskId = `MOCK-${Date.now().toString().slice(-8)}`;
+    const taskId = `TASK-${Date.now().toString().slice(-8)}`;
     const targetGroup = payload.targetType === "群聊" ? getGroup(payload.targetId) : null;
     if (payload.action === "创建群聊") {
       const newId = `R:${Date.now().toString().slice(-12)}`;
@@ -383,7 +474,7 @@
       `${payload.action}：指令已提交`,
       `托管账号：${account?.name || "-"}`,
       `目标：${target}`,
-      `文本内容：${payload.message || "模拟控制指令"}`,
+      `文本内容：${payload.message || "托管控制指令"}`,
       `执行结果：企业微信返回成功`,
     ];
     addLog({
@@ -397,6 +488,19 @@
       reply: `控制台任务 ${taskId} 执行成功`,
       status: "成功",
       detail: taskId,
+    });
+    const endpointMap = {
+      "发送文本": "send-text",
+      "发送图片": "send-image",
+      "发送文件": "send-file",
+      "创建群聊": "create-group",
+      "拉人进群": "invite-members",
+      "修改群名称": "rename-group",
+      "发送群公告": "group-notice",
+    };
+    persist(`/api/wecom/console/${endpointMap[payload.action] || "send-text"}`, "POST", payload, (task) => {
+      state.consoleTaskId = task.id || state.consoleTaskId;
+      if (state.page === "wechat") render();
     });
     return taskId;
   }
@@ -425,8 +529,11 @@
       operation: "导出对话记录",
       content: "CSV 导出",
       reply: state.wecomLastExport,
-      detail: "Mock 导出完成",
+      detail: "导出完成",
     });
+    if (apiAvailable) {
+      window.wecomApi.get("/api/wecom/logs/export").catch(() => null);
+    }
     return logs.length;
   }
 
@@ -455,6 +562,7 @@
     runWorkbenchAction,
     listTeamMembers,
     saveTeamMembers,
+    saveSidebarMenus,
     listLogs,
     exportLogs,
     addLog,

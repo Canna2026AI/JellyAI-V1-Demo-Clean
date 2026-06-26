@@ -119,18 +119,11 @@ if (state.modal === "wecomSidebarConfig") {
       <div class="wecom-compact-form">
         <div class="form-row"><div class="label">侧边栏菜单</div><input class="input" data-wecom-sidebar-field="menus" style="width:100%" value="${escapeHtml(state.wecomSidebarMenus.join(", "))}"></div>
         <div class="mini-card"><div class="mini-card-head">预览</div><div class="subtle">${state.wecomSidebarMenus.map((item) => escapeHtml(item)).join(" · ")}</div></div>
-        <p class="subtle">Mock 仅保存菜单配置；真实上线需要企业微信侧边栏 SDK 与登录态鉴权。</p>
+        <p class="subtle">当前后端会保存菜单配置；接入企业微信侧边栏 SDK 后可同步到真实客户会话侧边栏。</p>
       </div>
     `, "保存", () => {
       const value = document.querySelector("[data-wecom-sidebar-field='menus']")?.value || "";
-      state.wecomSidebarMenus = value.split(",").map((item) => item.trim()).filter(Boolean);
-      window.wecomService?.addLog({
-        operation: "保存自定义侧边栏",
-        target: "企业微信侧边栏",
-        content: state.wecomSidebarMenus.join(", "),
-        reply: "侧边栏配置已保存",
-        detail: "Mock 侧边栏",
-      });
+      window.wecomService?.saveSidebarMenus(value.split(",").map((item) => item.trim()).filter(Boolean));
       state.modal = null;
       showToast("自定义侧边栏已保存");
     });

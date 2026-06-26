@@ -1,0 +1,14 @@
+{
+  "name": "jellyai-v1-demo-clean",
+  "version": "1.0.0",
+  "private": true,
+  "description": "JellyAI V1 static demo with a production-shaped WeCom backend.",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "node backend/server.js",
+    "check:js": "find . -name '*.js' -not -path './backend/data/*' -print0 | xargs -0 -n 1 node --check"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

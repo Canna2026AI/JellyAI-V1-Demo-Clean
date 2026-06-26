@@ -259,7 +259,7 @@ function bindWecomEvents() {
         state.wecomLoading.logs = false;
         const count = window.wecomService?.exportLogs() || 0;
         render();
-        showToast(`已模拟导出 ${count} 条记录`);
+        showToast(`已导出 ${count} 条记录`);
       }, 700);
     })
   );
@@ -355,7 +355,7 @@ function runConsoleAction(action) {
   const targetName = document.getElementById("consoleTarget")?.value.trim() || (targetType === "群聊" ? window.wecomService?.getGroup(groupId)?.name : state.wecomContacts?.find((contact) => contact.id === contactId)?.name) || "未选择目标";
   const message = document.getElementById("consoleMessage")?.value.trim() || "未填写消息内容";
   state.wecomLoading.console = true;
-  state.consoleStatus = [`${action}：正在提交`, `目标：${targetName}`, "等待企业微信 Mock 返回"];
+  state.consoleStatus = [`${action}：正在提交`, `目标：${targetName}`, "等待托管后端返回"];
   showToast(`${action}已提交`);
   render();
   window.setTimeout(() => {
