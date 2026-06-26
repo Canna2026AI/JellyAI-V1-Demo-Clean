@@ -1,7 +1,7 @@
 // Aggregated conversation page and modal events.
 
 function bindConversationEvents() {
-document.querySelector("[data-agent-status-toggle]")?.addEventListener("click", (event) => {
+  document.querySelector("[data-agent-status-toggle]")?.addEventListener("click", (event) => {
     event.stopPropagation();
     setState({ agentStatusOpen: !state.agentStatusOpen });
   });
@@ -13,11 +13,11 @@ document.querySelector("[data-agent-status-toggle]")?.addEventListener("click", 
     })
   );
 
-document.querySelectorAll("[data-chat-settings-open]").forEach((el) =>
+  document.querySelectorAll("[data-chat-settings-open]").forEach((el) =>
     el.addEventListener("click", () => setState({ chatSettingsOpen: true, chatSettingsTab: el.dataset.chatSettingsOpen, chatSortOpen: false, chatSearchOpen: false, agentStatusOpen: false }))
   );
 
-document.querySelectorAll("[data-chat-filter]").forEach((el) =>
+  document.querySelectorAll("[data-chat-filter]").forEach((el) =>
     el.addEventListener("click", () => setState({ chatFilter: el.dataset.chatFilter, selectedConversation: null, chatSettingsOpen: false, chatSortOpen: false, chatSearchModeOpen: false, chatSearchQuery: "" }))
   );
   document.querySelectorAll("[data-chat-settings]").forEach((el) =>
@@ -29,24 +29,156 @@ document.querySelectorAll("[data-chat-filter]").forEach((el) =>
   document.querySelectorAll("[data-chat-settings-tab]").forEach((el) =>
     el.addEventListener("click", () => setState({ chatSettingsTab: el.dataset.chatSettingsTab }))
   );
-  document.querySelector("[data-work-hours-switch]")?.addEventListener("click", () =>
-    setState({ workHoursEnabled: !state.workHoursEnabled })
-  );
-  document.querySelector("[data-add-work-time]")?.addEventListener("click", () =>
-    setState({ workTimeRangeCount: state.workTimeRangeCount + 1 })
-  );
-  document.querySelectorAll("[data-remove-work-time]").forEach((el) =>
-    el.addEventListener("click", () => setState({ workTimeRangeCount: Math.max(1, state.workTimeRangeCount - 1) }))
-  );
-  document.querySelector("[data-add-work-schedule]")?.addEventListener("click", () =>
-    setState({ workScheduleCount: state.workScheduleCount + 1 })
-  );
+
+  bindWorkHoursEvents();
+  bindAutomationSettingsEvents();
+  bindForwardSettingsEvents();
+  bindQuickMessageSettingsEvents();
+  bindConversationListEvents();
+  bindConversationDetailEvents();
+  bindConversationInfoEvents();
+  bindConversationConfirmEvents();
+  if (state.modal === "conversationMembers") bindConversationModalEvents();
+}
+
+function bindWorkHoursEvents() {
+  document.querySelector("[data-work-hours-switch]")?.addEventListener("click", () => {
+    workHoursSettings.enabled = !workHoursSettings.enabled;
+    saveWorkHoursSettings();
+    setState({});
+  });
+  document.querySelectorAll("[data-add-work-time]").forEach((el) => el.addEventListener("click", () => {
+    const index = Number(el.dataset.addWorkTime);
+    workHoursSettings.schedules[index]?.ranges.push({ start: "09:00", end: "18:00" });
+    saveWorkHoursSettings();
+    setState({});
+  }));
+  document.querySelectorAll("[data-remove-work-time]").forEach((el) => el.addEventListener("click", () => {
+    const [scheduleIndex, rangeIndex] = el.dataset.removeWorkTime.split(":").map(Number);
+    const schedule = workHoursSettings.schedules[scheduleIndex];
+    if (!schedule) return;
+    schedule.ranges.splice(rangeIndex, 1);
+    if (!schedule.ranges.length) schedule.ranges.push({ start: "09:00", end: "18:00" });
+    saveWorkHoursSettings();
+    setState({});
+  }));
+  document.querySelector("[data-add-work-schedule]")?.addEventListener("click", () => {
+    workHoursSettings.schedules.push({ day: "周一至周五", ranges: [{ start: "09:00", end: "18:00" }] });
+    saveWorkHoursSettings();
+    setState({});
+  });
   document.querySelectorAll("[data-remove-work-schedule]").forEach((el) =>
-    el.addEventListener("click", () => setState({ workScheduleCount: Math.max(1, state.workScheduleCount - 1) }))
+    el.addEventListener("click", () => {
+      workHoursSettings.schedules.splice(Number(el.dataset.removeWorkSchedule), 1);
+      if (!workHoursSettings.schedules.length) workHoursSettings.schedules.push({ day: "周一至周五", ranges: [{ start: "09:00", end: "18:00" }] });
+      saveWorkHoursSettings();
+      setState({});
+    })
   );
+  document.querySelector("[data-work-hours-save]")?.addEventListener("click", () => {
+    syncWorkHoursFromDom();
+    saveWorkHoursSettings();
+    showToast("工作时间设置已保存");
+    setState({ chatSettingsOpen: false });
+  });
   document.querySelector("[data-chat-settings-back]")?.addEventListener("click", () =>
     setState({ chatSettingsOpen: false })
   );
+  document.querySelectorAll("[data-after-hours-format]").forEach((el) =>
+    el.addEventListener("click", () => {
+      document.querySelector("[data-after-hours-text]")?.focus();
+      document.execCommand(el.dataset.afterHoursFormat, false, el.dataset.formatValue || null);
+    })
+  );
+  document.querySelectorAll("[data-after-hours-insert]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const content = document.querySelector("[data-after-hours-text]");
+      content?.focus();
+      insertEditorToken(el.dataset.afterHoursInsert);
+      workHoursSettings.afterHoursText = content?.textContent.trim() || workHoursSettings.afterHoursText;
+      showToast("内容已插入");
+    })
+  );
+}
+
+function syncWorkHoursFromDom() {
+  const schedules = Array.from(document.querySelectorAll("[data-work-schedule-row]")).map((row) => ({
+    day: row.querySelector("[data-work-day]")?.value || "周一至周五",
+    ranges: Array.from(row.querySelectorAll("[data-work-range-row]")).map((range) => ({
+      start: range.querySelector("[data-work-start]")?.value || "09:00",
+      end: range.querySelector("[data-work-end]")?.value || "18:00",
+    })),
+  }));
+  workHoursSettings.schedules = schedules.length ? schedules : [{ day: "周一至周五", ranges: [{ start: "09:00", end: "18:00" }] }];
+  workHoursSettings.afterHoursAction = document.querySelector("[data-after-hours-action]")?.value || workHoursSettings.afterHoursAction;
+  workHoursSettings.afterHoursText = document.querySelector("[data-after-hours-text]")?.textContent.trim() || workHoursSettings.afterHoursText;
+}
+
+function bindAutomationSettingsEvents() {
+  document.querySelectorAll("[data-automation-enabled]").forEach((el) => el.addEventListener("click", () => {
+    const id = el.dataset.automationEnabled;
+    automationSettings[id].enabled = !automationSettings[id].enabled;
+    saveAutomationSettings();
+    showToast(`${getAutomationLabel(id)}已${automationSettings[id].enabled ? "开启" : "关闭"}`);
+    setState({});
+  }));
+  document.querySelectorAll("[data-automation-stop]").forEach((el) => el.addEventListener("click", () => {
+    const id = el.dataset.automationStop;
+    automationSettings[id].stopOnReply = !automationSettings[id].stopOnReply;
+    saveAutomationSettings();
+    showToast("停止回复条件已更新");
+    setState({});
+  }));
+  document.querySelectorAll("[data-automation-save]").forEach((el) => el.addEventListener("click", () => {
+    syncAutomationSettingsFromDom();
+    saveAutomationSettings();
+    showToast(`${getAutomationLabel(el.dataset.automationSave)}设置已保存`);
+    setState({});
+  }));
+}
+
+function bindForwardSettingsEvents() {
+  document.querySelector("[data-forward-enabled]")?.addEventListener("click", () => {
+    forwardSettings.enabled = !forwardSettings.enabled;
+    saveForwardSettings();
+    showToast(`消息转发已${forwardSettings.enabled ? "开启" : "关闭"}`);
+    setState({});
+  });
+  document.querySelector("[data-forward-save]")?.addEventListener("click", () => {
+    forwardSettings.channel = document.querySelector("[data-forward-channel]")?.value || forwardSettings.channel;
+    forwardSettings.scope = document.querySelector("[data-forward-scope]")?.value || forwardSettings.scope;
+    forwardSettings.webhook = document.querySelector("[data-forward-webhook]")?.value.trim() || "";
+    saveForwardSettings();
+    showToast("消息转发设置已保存");
+    setState({});
+  });
+}
+
+function syncAutomationSettingsFromDom() {
+  document.querySelectorAll("[data-auto-field]").forEach((el) => {
+    const [group, key] = el.dataset.autoField.split(".");
+    if (!automationSettings[group]) return;
+    const value = el.type === "number" || el.type === "range" ? Number(el.value) : el.value;
+    automationSettings[group][key] = Number.isNaN(value) ? el.value : value;
+  });
+  document.querySelectorAll("[data-auto-check]").forEach((el) => {
+    const [group, key] = el.dataset.autoCheck.split(".");
+    if (!automationSettings[group]) return;
+    automationSettings[group][key] = el.checked;
+  });
+}
+
+function getAutomationLabel(id) {
+  return {
+    followUp: "AI 自动跟进",
+    closingReply: "结束时 AI 自动回复",
+    media: "AI 多媒体内容发送",
+    split: "AI 长回复内容拆分",
+    summary: "自定义 AI 内容提取/总结",
+  }[id] || "自动化";
+}
+
+function bindQuickMessageSettingsEvents() {
   const quickMessageSearch = document.querySelector("[data-quick-message-search]");
   if (quickMessageSearch) quickMessageSearch.addEventListener("input", () => {
     const query = quickMessageSearch.value;
@@ -56,12 +188,17 @@ document.querySelectorAll("[data-chat-filter]").forEach((el) =>
     nextInput?.setSelectionRange(query.length, query.length);
   });
   document.querySelectorAll("[data-quick-reply-delete]").forEach((el) => el.addEventListener("click", () => {
-    const index = quickMessageData.replies.findIndex((reply) => reply.id === el.dataset.quickReplyDelete);
-    if (index >= 0) quickMessageData.replies.splice(index, 1);
-    saveQuickMessageData();
-    setState({});
-    showToast("快捷回复已删除");
+    openConversationConfirm("删除快捷回复", "删除后当前 Demo 中将不再展示该快捷回复。", "删除", () => {
+      const index = quickMessageData.replies.findIndex((reply) => reply.id === el.dataset.quickReplyDelete);
+      if (index >= 0) quickMessageData.replies.splice(index, 1);
+      saveQuickMessageData();
+      state.modal = null;
+      showToast("快捷回复已删除");
+    });
   }));
+}
+
+function bindConversationListEvents() {
   const chatSortToggle = document.querySelector("[data-chat-sort-toggle]");
   if (chatSortToggle) chatSortToggle.addEventListener("click", () => setState({ chatSortOpen: !state.chatSortOpen }));
   document.querySelectorAll("[data-chat-sort]").forEach((el) =>
@@ -82,35 +219,159 @@ document.querySelectorAll("[data-chat-filter]").forEach((el) =>
   );
   const chatSearchInput = document.querySelector("[data-chat-search-input]");
   if (chatSearchInput) chatSearchInput.addEventListener("input", () => {
-    state.chatSearchQuery = chatSearchInput.value;
-    const conversations = sortConversations(conversationMap[state.chatFilter] || []).filter(matchesConversationSearch);
-    const listHead = document.querySelector(".conv-search-panel");
-    if (!listHead) return;
-    let node = listHead.nextElementSibling;
-    while (node && !node.classList.contains("join-card")) {
-      const next = node.nextElementSibling;
-      node.remove();
-      node = next;
-    }
-    listHead.insertAdjacentHTML("afterend", conversations.length
-      ? conversations.map((item) => renderConversationItem(item)).join("")
-      : `<div class="empty" style="min-height:240px">未找到匹配的对话</div>`);
-    document.querySelectorAll("[data-conversation]").forEach((el) =>
-      el.addEventListener("click", () => setState({ selectedConversation: el.dataset.conversation }))
-    );
+    const query = chatSearchInput.value;
+    setState({ chatSearchQuery: query });
+    const nextInput = document.querySelector("[data-chat-search-input]");
+    nextInput?.focus();
+    nextInput?.setSelectionRange(query.length, query.length);
   });
-  const chatSearchClose = document.querySelector("[data-chat-search-close]");
-  if (chatSearchClose) chatSearchClose.addEventListener("click", () => setState({ chatSearchOpen: false, chatSearchModeOpen: false, chatSearchQuery: "" }));
+  document.querySelector("[data-chat-search-close]")?.addEventListener("click", () => setState({ chatSearchOpen: false, chatSearchModeOpen: false, chatSearchQuery: "" }));
+  document.querySelector("[data-chat-status-filter]")?.addEventListener("change", (event) => setState({ chatStatusFilter: event.target.value, selectedConversation: null }));
+  document.querySelector("[data-chat-channel-filter]")?.addEventListener("change", (event) => setState({ chatChannelFilter: event.target.value, selectedConversation: null }));
   document.querySelectorAll("[data-conversation]").forEach((el) =>
-    el.addEventListener("click", () => setState({ selectedConversation: el.dataset.conversation }))
+    el.addEventListener("click", () => {
+      markConversationRead(el.dataset.conversation);
+      setState({ selectedConversation: el.dataset.conversation, chatLoading: true, chatSortOpen: false, chatSearchModeOpen: false });
+      window.setTimeout(() => {
+        if (state.selectedConversation === el.dataset.conversation) setState({ chatLoading: false });
+      }, 180);
+    })
   );
+  document.querySelector("[data-hide-channel-promo]")?.addEventListener("click", (event) => {
+    event.currentTarget.closest(".join-card")?.remove();
+  });
+}
 
-const convSend = document.getElementById("convSend");
+function bindConversationDetailEvents() {
+  document.querySelectorAll("[data-compose-mode]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.conversationComposeMode = el.dataset.composeMode || "reply";
+      setState({});
+    })
+  );
+  document.querySelectorAll("[data-quick-insert]").forEach((el) => el.addEventListener("click", () => {
+    const reply = quickMessageData.replies.find((item) => item.id === el.dataset.quickInsert);
+    if (!reply) return;
+    insertReplyText(reply.content);
+    showToast("快捷回复已插入");
+  }));
+  const convSend = document.getElementById("convSend");
   if (convSend) convSend.addEventListener("click", sendConvMessage);
+  const noteSave = document.getElementById("convNoteSave");
+  if (noteSave) noteSave.addEventListener("click", saveConversationNoteFromInput);
+  const materialSend = document.getElementById("convMaterialSend");
+  if (materialSend) materialSend.addEventListener("click", sendConversationMaterialFromInput);
+  document.querySelectorAll("[data-material-sample]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const type = document.getElementById("convMaterialType");
+      const title = document.getElementById("convMaterialTitle");
+      const url = document.getElementById("convMaterialUrl");
+      if (type) type.value = el.dataset.materialType || "file";
+      if (title) title.value = el.dataset.materialTitle || "";
+      if (url) url.value = el.dataset.materialUrl || "";
+      document.getElementById("convMaterialCaption")?.focus();
+      showToast("素材已选择");
+    })
+  );
+  const input = document.getElementById("convInput");
+  if (input) input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    if (!document.querySelector("[data-enter-to-send]")?.checked) return;
+    event.preventDefault();
+    sendConvMessage();
+  });
+  const noteInput = document.getElementById("convNoteInput");
+  if (noteInput) noteInput.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      saveConversationNoteFromInput();
+    }
+  });
+  document.querySelector("[data-cancel-ai-reply]")?.addEventListener("click", (event) => {
+    cancelAiReply(event.currentTarget.dataset.cancelAiReply);
+    showToast("已取消 AI 代答，转为人工跟进");
+    setState({});
+  });
+  const conv = getSelectedConversation();
+  if (conv) queueAiAutoReply(conv.id);
+}
+
+function bindConversationInfoEvents() {
+  document.querySelector("[data-conversation-status-button]")?.addEventListener("click", () => {
+    const conv = getSelectedConversation();
+    if (!conv) return;
+    const nextLabel = conv.status === "已解决" ? "重新打开" : "标记为已解决";
+    openConversationConfirm(nextLabel, `确认将“${conv.name}”${nextLabel}？`, "确认", () => {
+      const nextStatus = toggleConversationResolved(conv.id);
+      state.modal = null;
+      showToast(`会话已${nextStatus === "已解决" ? "标记为已解决" : "重新打开"}`);
+    });
+  });
+  document.querySelector("[data-transfer-human]")?.addEventListener("click", () => {
+    const conv = getSelectedConversation();
+    if (!conv) return;
+    openConversationConfirm("转入人工", `确认将“${conv.name}”转入 Kelvin 处理？`, "确认转入", () => {
+      transferConversationToHuman(conv.id);
+      state.modal = null;
+      showToast("已转入人工");
+    });
+  });
+  document.querySelector("[data-conversation-status]")?.addEventListener("change", (event) => {
+    const conv = getSelectedConversation();
+    if (!conv) return;
+    updateConversationStatus(conv.id, event.target.value);
+    showToast("会话状态已更新");
+    setState({});
+  });
+  document.querySelectorAll("[data-customer-tag]").forEach((el) => el.addEventListener("click", () => {
+    const conv = getSelectedConversation();
+    if (!conv) return;
+    toggleConversationTag(conv.id, el.dataset.customerTag);
+    showToast("客户标签已更新");
+    setState({});
+  }));
+  document.querySelector("[data-add-customer-tag]")?.addEventListener("click", () => {
+    const conv = getSelectedConversation();
+    const input = document.querySelector("[data-new-customer-tag]");
+    if (!conv || !input) return;
+    if (!addConversationTag(conv.id, input.value)) {
+      showToast("请输入标签名称");
+      return;
+    }
+    showToast("客户标签已添加");
+    setState({});
+  });
+  document.querySelector("[data-hosted-toggle]")?.addEventListener("click", () => {
+    const conv = getSelectedConversation();
+    if (!conv) return;
+    const enabled = toggleConversationHosted(conv.id);
+    showToast(`托管状态已${enabled ? "开启" : "暂停"}`);
+    setState({});
+  });
+  document.querySelector("[data-star-conversation]")?.addEventListener("click", () => {
+    const conv = getSelectedConversation();
+    if (!conv) return;
+    conv.starred = !conv.starred;
+    if (conv.starred && !conv.viewTags.includes("收藏")) conv.viewTags.push("收藏");
+    if (!conv.starred) conv.viewTags = conv.viewTags.filter((tag) => tag !== "收藏");
+    saveConversationData({ skipBackendBulk: true });
+    syncConversationBackend(window.conversationService?.updateStarred(conv.id, conv.starred));
+    showToast(conv.starred ? "已收藏会话" : "已取消收藏");
+    setState({});
+  });
+}
+
+function bindConversationConfirmEvents() {
+  document.querySelectorAll("[data-conversation-confirm-cancel]").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
+      closeConversationConfirm();
+    })
+  );
 }
 
 function bindConversationModalEvents() {
-document.querySelectorAll("[data-custom-view-step]").forEach((el) =>
+  document.querySelectorAll("[data-custom-view-step]").forEach((el) =>
     el.addEventListener("click", () => {
       const targetStep = Number(el.dataset.customViewStep);
       if (targetStep < state.customViewStep) setState({ customViewStep: targetStep, customViewFieldOpen: false });
@@ -146,16 +407,15 @@ document.querySelectorAll("[data-custom-view-step]").forEach((el) =>
         return;
       }
       customConversationViews.push(viewName);
-      conversationMap[viewName] = [];
       saveCustomConversationViews(customConversationViews);
-      setState({ modal: null, customViewStep: 1, customViewName: "", customViewFilterRows: 1, customViewFieldOpen: false, customViewManual: false, chatFilter: viewName, selectedConversation: null });
+      setState({ modal: null, customViewStep: 1, customViewName: "", customViewFilterRows: 1, customViewFieldOpen: false, customViewManual: false, chatSettingsOpen: false, chatFilter: viewName, selectedConversation: null, chatSearchOpen: false, chatSearchModeOpen: false, chatSearchQuery: "", chatStatusFilter: "全部状态", chatChannelFilter: "全部渠道" });
       showToast(`对话组“${viewName}”已创建`);
       return;
     }
     setState({ customViewStep: state.customViewStep + 1, customViewFieldOpen: false });
   });
 
-const quickReplyRequired = document.querySelectorAll("[data-quick-reply-required]");
+  const quickReplyRequired = document.querySelectorAll("[data-quick-reply-required]");
   if (quickReplyRequired.length) {
     const updateQuickReplySave = () => {
       const group = document.getElementById("quickReplyGroup")?.value;
@@ -182,12 +442,134 @@ const quickReplyRequired = document.querySelectorAll("[data-quick-reply-required
       document.execCommand(el.dataset.quickFormat, false, el.dataset.formatValue || null);
     })
   );
+  document.querySelectorAll("[data-quick-insert-token]").forEach((el) =>
+    el.addEventListener("click", () => {
+      document.getElementById("quickReplyContent")?.focus();
+      insertEditorToken(el.dataset.quickInsertToken);
+      document.querySelector(".quick-reply-modal [data-modal-ok]")?.removeAttribute("disabled");
+    })
+  );
+
+  const memberSearch = document.querySelector("[data-group-member-search]");
+  if (memberSearch) memberSearch.addEventListener("input", () => {
+    const query = memberSearch.value;
+    setState({ conversationMemberSearch: query });
+    requestAnimationFrame(() => {
+      const nextInput = document.querySelector("[data-group-member-search]");
+      nextInput?.focus();
+      nextInput?.setSelectionRange(query.length, query.length);
+    });
+  });
+  document.querySelectorAll("[data-member-select]").forEach((el) =>
+    el.addEventListener("click", () => setState({ selectedConversationMember: el.dataset.memberSelect }))
+  );
+  document.querySelector("[data-toggle-member-tag]")?.addEventListener("click", (event) => {
+    const conv = getSelectedConversation();
+    if (!conv) return;
+    updateConversationMemberTag(conv.id, event.currentTarget.dataset.toggleMemberTag, "重点成员");
+    showToast("群成员标签已更新");
+    setState({});
+  });
+  document.querySelector("[data-copy-member-phone]")?.addEventListener("click", async (event) => {
+    const phone = event.currentTarget.dataset.copyMemberPhone;
+    if (!phone) return;
+    try {
+      await navigator.clipboard?.writeText(phone);
+      showToast("手机号已复制");
+    } catch {
+      showToast(`手机号：${phone}`);
+    }
+  });
+  document.querySelector("[data-insert-member-mention]")?.addEventListener("click", () => {
+    const conv = getSelectedConversation();
+    const member = getSelectedConversationMember(conv);
+    if (!member) return;
+    state.modal = null;
+    setState({});
+    requestAnimationFrame(() => {
+      const input = document.getElementById("convInput");
+      if (!input) return;
+      const prefix = input.value.trim() ? `${input.value.trim()} ` : "";
+      input.value = `${prefix}@${member.name} `;
+      input.focus();
+    });
+  });
+}
+
+function insertEditorToken(type) {
+  const snippets = {
+    link: "https://example.com",
+    image: "[图片]",
+    table: "\n| 项目 | 内容 |\n| --- | --- |\n| 备注 | 请输入内容 |\n",
+    variable: "{{客户名称}}",
+  };
+  document.execCommand("insertText", false, snippets[type] || "");
+}
+
+function insertReplyText(content) {
+  if (state.conversationComposeMode !== "reply") {
+    state.conversationComposeMode = "reply";
+    setState({});
+    requestAnimationFrame(() => insertReplyText(content));
+    return;
+  }
+  const input = document.getElementById("convInput");
+  if (!input) return;
+  const prefix = input.value.trim() ? `${input.value.trim()}\n` : "";
+  input.value = `${prefix}${content}`;
+  input.focus();
 }
 
 function sendConvMessage() {
   const input = document.getElementById("convInput");
-  const text = input.value.trim();
-  if (!text) return;
-  state.convMessages.push({ role: "me", text });
-  render();
+  const text = input?.value.trim();
+  const conv = getSelectedConversation();
+  if (!input || !conv) return;
+  if (!text) {
+    showToast("请输入回复内容");
+    return;
+  }
+  addConversationMessage(conv.id, text, "me");
+  input.value = "";
+  showToast("消息已发送");
+  setState({});
+  requestAnimationFrame(() => {
+    const box = document.querySelector(".conv-messages");
+    if (box) box.scrollTop = box.scrollHeight;
+  });
+}
+
+function saveConversationNoteFromInput() {
+  const input = document.getElementById("convNoteInput");
+  const text = input?.value.trim();
+  const conv = getSelectedConversation();
+  if (!input || !conv) return;
+  if (!text) {
+    showToast("请输入备注内容");
+    return;
+  }
+  addConversationNote(conv.id, text);
+  input.value = "";
+  showToast("备注已保存");
+  setState({});
+}
+
+function sendConversationMaterialFromInput() {
+  const conv = getSelectedConversation();
+  if (!conv) return;
+  const type = document.getElementById("convMaterialType")?.value || "file";
+  const title = document.getElementById("convMaterialTitle")?.value.trim() || "";
+  const url = document.getElementById("convMaterialUrl")?.value.trim() || "";
+  const caption = document.getElementById("convMaterialCaption")?.value.trim() || "";
+  if (!title && !url && !caption) {
+    showToast("请选择或填写素材");
+    return;
+  }
+  sendConversationMaterial(conv.id, { type, title, url, caption });
+  showToast(`${conv.channel} 素材消息已发送`);
+  setState({ conversationComposeMode: "reply" });
+  requestAnimationFrame(() => {
+    const box = document.querySelector(".conv-messages");
+    if (box) box.scrollTop = box.scrollHeight;
+  });
 }
