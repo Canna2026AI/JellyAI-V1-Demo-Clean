@@ -511,11 +511,16 @@
 .skill-import-backdrop {
   background: rgba(17, 24, 39, 0.42);
   backdrop-filter: blur(4px);
+  padding: 24px;
+  overflow: auto;
 }
 
 .skill-import-modal {
   width: 560px;
+  max-height: calc(100vh - 48px);
   border-radius: 14px;
+  display: flex;
+  flex-direction: column;
 }
 
 .skill-import-head {
@@ -552,7 +557,9 @@
 }
 
 .skill-import-list {
-  max-height: 505px;
+  min-height: 0;
+  max-height: none;
+  flex: 1;
   overflow: auto;
   display: grid;
   gap: 8px;
@@ -858,4 +865,3 @@
   border: 12px solid #fff;
   outline: 1px solid var(--line-dark);
 }
-

@@ -10,7 +10,7 @@ const ROOT_DIR = path.resolve(__dirname, "..");
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.AGENTS_DB_PATH || path.join(DATA_DIR, "agents-db.json");
 const PORT = Number(process.env.PORT || getArgValue("--port") || 3000);
-const MAX_BODY_BYTES = 1024 * 1024;
+const MAX_BODY_BYTES = 25 * 1024 * 1024;
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -89,7 +89,7 @@ function parseJsonBody(req) {
 
 function readDb() {
   ensureDbFile();
-  return JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+  return normalizeDb(JSON.parse(fs.readFileSync(DB_PATH, "utf8")));
 }
 
 function writeDb(db) {
@@ -116,10 +116,19 @@ function ensureDbFile() {
     tools: normalizeTools(seed.aiTools, now),
     toolOptions: seed.aiAgentToolOptions.map((item) => ({ ...item, teamId: "team-ouchen", createdAt: now, updatedAt: now })),
     agents: seed.aiAgents.map((item) => ({ ...item, teamId: "team-ouchen", createdBy: "user-kelvin", createdAt: now, updatedAt: now, deletedAt: null })),
+    knowledgeUploads: [],
     chatRuns: [],
     auditLogs: [],
   };
   writeDb(db);
+}
+
+function normalizeDb(db) {
+  if (!db.meta) db.meta = { version: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  if (!Array.isArray(db.knowledgeUploads)) db.knowledgeUploads = [];
+  if (!Array.isArray(db.auditLogs)) db.auditLogs = [];
+  if (!Array.isArray(db.chatRuns)) db.chatRuns = [];
+  return db;
 }
 
 function loadSeedData() {
@@ -328,6 +337,161 @@ function buildReply(db, agent, text) {
   };
 }
 
+function isSpreadsheetFile(fileName) {
+  return /\.(csv|xls|xlsx|xlsm|xlt|xltm|et|ett)$/i.test(fileName || "");
+}
+
+function decodeUploadText(body) {
+  const raw = typeof body.content === "string" ? body.content : "";
+  if (!raw) return "";
+  if (body.encoding === "base64") {
+    try {
+      return Buffer.from(raw, "base64").toString("utf8");
+    } catch (_error) {
+      return "";
+    }
+  }
+  return raw;
+}
+
+function cleanSegmentText(text, rules = {}) {
+  let next = String(text || "");
+  if (rules.trimSpaces !== false) next = next.replace(/[ \t\r\n]+/g, " ");
+  if (rules.removeUrls) next = next.replace(/https?:\/\/\S+/gi, "");
+  if (rules.removeEmails) next = next.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "");
+  if (rules.removePhones) next = next.replace(/(?:\+?86[- ]?)?1[3-9]\d{9}/g, "");
+  if (rules.removeIds) next = next.replace(/\b\d{17}[\dXx]\b/g, "");
+  if (rules.removeCards) next = next.replace(/\b\d{16,19}\b/g, "");
+  return next.trim();
+}
+
+function splitDelimitedRows(text) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.split(/\t|,|;|\s{2,}/).map((cell) => cell.trim()).filter(Boolean));
+}
+
+function fallbackLogisticsRows(fileName) {
+  return [
+    ["问题", "答案", "来源"],
+    ["欧洲海运包税运行线路", "深圳装柜 → 盐田港 → 鹿特丹港落港 → 荷兰/比利时清关 → 快递或卡车派送至欧洲仓库或收件地址", fileName || "上传文件"],
+    ["单件计费重规则", "单件计费重不足 12KG 按 12KG 计算，重货按体积重与实重取大值", fileName || "上传文件"],
+    ["转人工场景", "合同、投诉、报价异常或用户明确要求人工时，转入人工客服处理", fileName || "上传文件"],
+    ["收货限制", "仅接收普货，拒收皮革、纺织品、包包、服装、鞋子、纯玻璃、纯塑料等限制品", fileName || "上传文件"],
+  ];
+}
+
+function buildKnowledgeSegments(upload) {
+  const vectorMode = upload.vectorMode === "segment" ? "segment" : "row";
+  const segmentMode = upload.segmentMode === "custom" ? "custom" : "auto";
+  const custom = upload.customConfig || {};
+  const text = upload.text || "";
+  const rows = splitDelimitedRows(text);
+  let sourceRows = rows.length >= 2 ? rows : fallbackLogisticsRows(upload.fileName);
+  let items;
+
+  if (vectorMode === "row" && isSpreadsheetFile(upload.fileName)) {
+    items = sourceRows.slice(1, 9).map((row, index) => {
+      const question = row[0] || `第 ${index + 1} 行`;
+      const answer = row.slice(1).join("　") || question;
+      return {
+        text: `问题: ${question}　答案: ${answer}`,
+        relation: `逐行向量：第 ${index + 1} 行 → 1 个知识片段 → 1 条向量`,
+      };
+    });
+  } else {
+    const delimiter = segmentMode === "custom" ? custom.delimiter || "\\n" : "\\n";
+    const actualDelimiter = delimiter.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+    const maxLength = Math.min(Math.max(Number(custom.maxLength) || 1200, 200), 4000);
+    const sourceText = text && !text.includes("\u0000") ? text : fallbackLogisticsRows(upload.fileName).map((row) => row.join(" ")).join("\n");
+    const rawParts = sourceText.split(actualDelimiter).flatMap((part) => {
+      const trimmed = part.trim();
+      if (!trimmed) return [];
+      if (trimmed.length <= maxLength) return [trimmed];
+      const chunks = [];
+      for (let start = 0; start < trimmed.length; start += maxLength) chunks.push(trimmed.slice(start, start + maxLength));
+      return chunks;
+    });
+    items = rawParts.slice(0, 9).map((part, index) => ({
+      text: cleanSegmentText(part, custom.rules),
+      relation: `${segmentMode === "custom" ? "自定义分段" : "自动分段"}：片段 ${index + 1} → 语义清洗 → 1 条向量`,
+    }));
+  }
+
+  return items
+    .filter((item) => item.text)
+    .map((item, index) => ({
+      id: `#${String(index + 1).padStart(3, "0")}`,
+      count: `${item.text.length}字符`,
+      text: item.text,
+      vectorType: vectorMode === "row" ? "逐行向量" : "分段向量",
+      segmentMode: segmentMode === "custom" ? "自定义" : "自动分段与清洗",
+      relation: item.relation,
+    }));
+}
+
+function createKnowledgeUpload(db, user, body) {
+  const now = new Date().toISOString();
+  const upload = {
+    id: createId("kb-upload"),
+    teamId: user.teamId,
+    fileName: normalizeText(body.fileName, "未命名文件.txt"),
+    fileType: normalizeText(body.fileType || body.type, "application/octet-stream"),
+    size: Number(body.size) || 0,
+    text: decodeUploadText(body).slice(0, 400000),
+    vectorMode: body.vectorMode === "segment" ? "segment" : "row",
+    segmentMode: body.segmentMode === "custom" ? "custom" : "auto",
+    customConfig: body.customConfig || {
+      delimiter: "\\n",
+      maxLength: 2000,
+      rules: { trimSpaces: true },
+    },
+    status: "processed",
+    createdAt: now,
+    updatedAt: now,
+  };
+  upload.segments = buildKnowledgeSegments(upload);
+  db.knowledgeUploads.unshift(upload);
+  db.knowledgeUploads = db.knowledgeUploads.slice(0, 100);
+  audit(db, user, "upload", "knowledge_upload", upload.id, null, clone(upload));
+  return upload;
+}
+
+function updateKnowledgeUpload(upload, body) {
+  if (body.vectorMode) upload.vectorMode = body.vectorMode === "segment" ? "segment" : "row";
+  if (body.segmentMode) upload.segmentMode = body.segmentMode === "custom" ? "custom" : "auto";
+  if (body.customConfig) upload.customConfig = body.customConfig;
+  touch(upload);
+  upload.segments = buildKnowledgeSegments(upload);
+  return upload;
+}
+
+function createKnowledgeBaseFromUpload(db, user, body) {
+  const now = new Date().toISOString();
+  const upload = db.knowledgeUploads.find((item) => item.teamId === user.teamId && item.id === body.uploadId);
+  const name = normalizeText(body.name, upload?.fileName ? upload.fileName.replace(/\.[^.]+$/, "") : "新建知识库");
+  const segments = upload?.segments || [];
+  const knowledgeBase = {
+    id: createId("kb"),
+    teamId: user.teamId,
+    name,
+    count: `${segments.length || 1}条数据`,
+    type: upload?.vectorMode === "segment" ? "分段向量" : "逐行向量",
+    icon: isSpreadsheetFile(upload?.fileName) ? "X" : "文",
+    size: upload?.size ? `${(upload.size / 1024).toFixed(2)}KB` : "0KB",
+    uploadId: upload?.id || null,
+    fileName: upload?.fileName || "",
+    segments,
+    createdAt: now,
+    updatedAt: now,
+  };
+  db.knowledgeBases.unshift(knowledgeBase);
+  audit(db, user, "create", "knowledge_base", knowledgeBase.id, null, clone(knowledgeBase));
+  return knowledgeBase;
+}
+
 async function handleApi(req, res, url) {
   if (req.method === "OPTIONS") {
     jsonResponse(res, 204, {});
@@ -367,6 +531,34 @@ async function handleApi(req, res, url) {
     if (req.method === "GET" && parts.length === 1) {
       requirePermission(user, "agents:read");
       ok(res, db.knowledgeBases.filter((item) => item.teamId === user.teamId));
+      return;
+    }
+    if (req.method === "POST" && parts.length === 1) {
+      requirePermission(user, "agents:update");
+      const knowledgeBase = createKnowledgeBaseFromUpload(db, user, body);
+      writeDb(db);
+      ok(res, knowledgeBase, 201);
+      return;
+    }
+    if (req.method === "POST" && parts[1] === "uploads") {
+      requirePermission(user, "agents:update");
+      const upload = createKnowledgeUpload(db, user, body);
+      writeDb(db);
+      ok(res, upload, 201);
+      return;
+    }
+    if (req.method === "PATCH" && parts[1] === "uploads" && (parts.length === 3 || (parts.length === 4 && parts[3] === "segmentation"))) {
+      requirePermission(user, "agents:update");
+      const upload = db.knowledgeUploads.find((item) => item.teamId === user.teamId && item.id === parts[2]);
+      if (!upload) {
+        fail(res, 404, "KNOWLEDGE_UPLOAD_NOT_FOUND", "上传文件不存在");
+        return;
+      }
+      const before = clone(upload);
+      updateKnowledgeUpload(upload, body);
+      audit(db, user, "update_segmentation", "knowledge_upload", upload.id, before, clone(upload));
+      writeDb(db);
+      ok(res, upload);
       return;
     }
     if (req.method === "DELETE" && parts.length === 2) {
@@ -666,9 +858,10 @@ function serveStatic(req, res, url) {
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
+    const noStore = [".html", ".js", ".css"].includes(ext);
     res.writeHead(200, {
       "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
-      "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=60",
+      "Cache-Control": noStore ? "no-store" : "public, max-age=60",
     });
     fs.createReadStream(filePath).pipe(res);
   });

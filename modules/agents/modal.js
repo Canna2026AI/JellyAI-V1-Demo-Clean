@@ -4,10 +4,10 @@ function renderAgentModal() {
   if (!state.modal) return "";
 if (state.modal === "createAssistant") {
     return modal("创建助手", `
-      <div class="form-row"><div class="label">助手名称 *</div><input class="input" style="width:100%" id="newAssistantName" placeholder="请输入" value="物流客服助手"></div>
-      <div class="form-row"><div class="label">助手描述</div><textarea class="textarea" style="width:100%" id="newAssistantDesc" placeholder="助手功能介绍">用于企业微信物流咨询、报价问答和转人工服务</textarea></div>
+      <div class="form-row"><div class="label">助手名称 *</div><input class="input" style="width:100%" id="newAssistantName" placeholder="请输入助手名称"></div>
+      <div class="form-row"><div class="label">助手描述</div><textarea class="textarea" style="width:100%" id="newAssistantDesc" placeholder="请输入助手功能介绍"></textarea></div>
       <div class="form-row"><div class="label">模型</div><select class="select" style="width:100%" id="newAssistantModel">${renderSelectOptions(aiAgentModels, aiAgentModels[0])}</select></div>
-      <div class="form-row"><div class="label">开场白</div><textarea class="textarea" style="width:100%" id="newAssistantOpening">Hi~ 我是您的智能助手，想要我协助您完成什么任务？发送消息给我吧！</textarea></div>
+      <div class="form-row"><div class="label">开场白</div><textarea class="textarea" style="width:100%" id="newAssistantOpening" placeholder="请输入用户进入对话时看到的第一句话"></textarea></div>
       <div class="form-row"><div class="label">助手图标</div>${iconBox("AI")}</div>
     `, "确认", createAgentFromForm);
   }
@@ -42,6 +42,9 @@ if (state.modal === "addSkillTool") {
           .join("")}
       </div>
     `, "确定", () => {
+      const skill = skills.find((item) => item.id === state.selectedSkillId);
+      if (skill) skill.tool = true;
+      else state.pendingSkillTool = true;
       state.modal = null;
       showToast("工具已添加");
     });

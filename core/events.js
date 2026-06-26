@@ -48,7 +48,11 @@ document.querySelectorAll("[data-demo-action]").forEach((el) =>
       const page = el.dataset.page;
       if (!page) return;
       if (page === "knowledgeCreate") {
-        setState({ page, selectedAssistant: null, assistantSub: "knowledge", knowledgeCreateStep: 1, knowledgeCreateType: "", knowledgeVectorMode: "row", knowledgeSegmentMode: "auto", knowledgePreview: false, topPopover: null, agentStatusOpen: false });
+        if (typeof resetKnowledgeCreateState === "function") {
+          resetKnowledgeCreateState({ page, selectedAssistant: null, assistantSub: "knowledge", topPopover: null, agentStatusOpen: false });
+        } else {
+          setState({ page, selectedAssistant: null, assistantSub: "knowledge", knowledgeCreateStep: 1, knowledgeCreateType: "", knowledgeVectorMode: "row", knowledgeSegmentMode: "auto", knowledgePreview: false, topPopover: null, agentStatusOpen: false });
+        }
         return;
       }
       if (page === "wechat" && state.page !== "wechat") {

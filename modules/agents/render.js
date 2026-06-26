@@ -1,5 +1,9 @@
 // AI agent module renderers.
 
+function renderInfoTip(text) {
+  return `<span class="info-tip" tabindex="0" data-tip="${escapeHtml(text)}">ⓘ</span>`;
+}
+
 function renderAiList() {
   const content = {
     assistant: renderAssistantManager,
@@ -58,15 +62,15 @@ function renderAssistantManager() {
               .map(
                 (agent) => `
         <div class="card assistant-card" data-open-assistant="${agent.id}">
-          <div style="display:flex; gap:12px; align-items:center">
+          <div class="assistant-card-main">
             ${iconBox("AI")}
-            <div>
-              <div style="font-weight:700">${escapeHtml(agent.name)}</div>
+            <div class="assistant-card-copy">
+              <div class="assistant-card-name">${escapeHtml(agent.name)}</div>
               <div class="subtle assistant-card-desc">${escapeHtml(agent.description)}</div>
               <span class="tag ${agent.status === "enabled" ? "green" : "red"}">${agent.status === "enabled" ? "已启用" : "已停用"}</span>
             </div>
           </div>
-          <button class="button ghost small" data-agent-status-toggle="${agent.id}">${agent.status === "enabled" ? "停用" : "启用"}</button>
+          <button class="button ghost small assistant-card-action" data-agent-status-toggle="${agent.id}">${agent.status === "enabled" ? "停用" : "启用"}</button>
         </div>`
               )
               .join("")
@@ -113,6 +117,7 @@ function renderKnowledgeCard(kb) {
 
 function renderSkillManager() {
   const filtered = getFilteredSkills();
+  const channelLabel = state.skillChannelFilter === "all" ? "全部渠道" : state.skillChannelFilter;
   return `<div class="module-content skill-manager-page">
     <div class="skill-page-head">
       <h1 class="page-title">AI技能</h1>
@@ -131,7 +136,7 @@ function renderSkillManager() {
           .map(([id, label]) => `<button class="${state.skillFilter === id ? "active" : ""}" data-skill-filter="${id}">${label}</button>`)
           .join("")}
       </div>
-      <button class="select-like skill-channel" data-skill-channel><span>全部渠道</span><span>⌄</span></button>
+      <button class="select-like skill-channel" data-skill-channel><span>${escapeHtml(channelLabel)}</span><span>⌄</span></button>
     </div>
     <div class="skill-grid">
       ${filtered.length ? filtered.map(renderSkillCard).join("") : `<div class="card empty agent-empty-state"><b>暂无技能</b><span>请调整筛选条件，或创建一个新技能。</span><button class="button dark" data-skill-create>＋ 创建技能</button></div>`}
@@ -167,7 +172,7 @@ function renderSkillGuide() {
 
 function renderSkillCard(skill) {
   return `<div class="skill-card" data-skill-open="${skill.id}">
-    <div class="skill-card-menu">•••</div>
+    <button type="button" class="skill-card-menu" data-skill-card-menu="${skill.id}">•••</button>
     <div class="skill-logo ${skill.icon === "AI" ? "bird" : ""}">${skill.icon}</div>
     <h3>${skill.name}</h3>
     <p>${skill.desc}</p>
@@ -367,7 +372,7 @@ function renderSkillEditPage() {
           <div><b>工具列表</b><div class="hint">此技能可调用的外部工具与 API</div></div>
           <button class="button dashed small" data-modal="addSkillTool">＋ 添加工具</button>
         </div>
-        ${skill?.tool ? renderSkillToolItem() : `<div class="dashed-empty"><div class="empty-icon">⌘</div><span>暂未添加工具</span><button class="button dashed small" data-modal="addSkillTool">＋ 添加第一个工具</button></div>`}
+        ${skill?.tool || state.pendingSkillTool ? renderSkillToolItem() : `<div class="dashed-empty"><div class="empty-icon">⌘</div><span>暂未添加工具</span><button class="button dashed small" data-modal="addSkillTool">＋ 添加第一个工具</button></div>`}
         <div class="skill-section-head">
           <div><b>知识列表</b><div class="hint">此技能可检索的知识库，用于增强 AI 回答能力</div></div>
           <button class="button dashed small" data-modal="associateKnowledge">＋ 关联知识库</button>
@@ -382,7 +387,15 @@ function renderSkillEditPage() {
 function renderSkillEditor(skill) {
   const prompt = skill?.prompt || "";
   return `<div class="skill-editor">
-    <div class="editor-toolbar skill-editor-toolbar"><b>B</b><b>H</b><span>▣</span><span>☷</span><span>☰</span><button class="link-button" data-demo-action="插入技能变量">〔x〕 插入变量</button><span style="margin-left:auto">↗</span></div>
+    <div class="editor-toolbar skill-editor-toolbar" data-toolbar-target="skillPromptInput">
+      <button type="button" data-editor-command="bold" data-editor-target="skillPromptInput" title="加粗">B</button>
+      <button type="button" data-editor-command="heading" data-editor-target="skillPromptInput" title="标题">H</button>
+      <button type="button" data-editor-command="highlight" data-editor-target="skillPromptInput" title="重点标记">▣</button>
+      <button type="button" data-editor-command="insertUnorderedList" data-editor-target="skillPromptInput" title="项目符号">☷</button>
+      <button type="button" data-editor-command="insertOrderedList" data-editor-target="skillPromptInput" title="编号列表">☰</button>
+      <button type="button" class="link-button" data-editor-action="variable" data-editor-target="skillPromptInput">〔x〕 插入变量</button>
+      <button type="button" style="margin-left:auto" data-editor-action="expand" data-editor-target="skillPromptInput" title="展开">↗</button>
+    </div>
     <div class="rich-editor skill-rich-editor" id="skillPromptInput" contenteditable="true">${escapeHtml(prompt || "")}</div>
   </div>`;
 }
@@ -412,6 +425,7 @@ function renderAssistantDetail() {
           <span class="tag ${agent.status === "enabled" ? "green" : "red"}">${agent.status === "enabled" ? "已启用" : "已停用"}</span>
         </div>
         <div class="assistant-detail-actions">
+          <button class="button" data-agent-back>返回</button>
           <button class="button" data-agent-status-toggle="${agent.id}">${agent.status === "enabled" ? "停用" : "启用"}</button>
           <button class="button primary" data-demo-action="分享智能体">↗ 已分享</button>
         </div>
@@ -455,7 +469,7 @@ function renderSettingConfig() {
   const agent = getSelectedAgent();
   const draft = getAgentSettingsDraft(agent);
   return `
-    <h3 class="detail-section-title">智能助手设置 <span class="subtle">ⓘ</span></h3>
+    <h3 class="detail-section-title">智能助手设置 ${renderInfoTip("配置助手名称、模型、系统提示词、上下文记忆和开场白。保存后右侧预览会按最新配置回复。")}</h3>
     <div class="grid-2">
       <div class="form-row">
         <div class="label">助手名称</div>
@@ -473,17 +487,24 @@ function renderSettingConfig() {
       ${state.detailModelOpen ? renderDetailModelPanel() : ""}
     </div>
     <div class="form-row">
-      <div class="label">功能与步骤设置 <span class="subtle">ⓘ</span><button class="link-button detail-expand" data-detail-action="展开步骤设置">展开</button></div>
-      <div class="editor-toolbar detail-toolbar"><b>B</b><b>H</b><span>▣</span><span>☰</span><span>1₂</span><button class="link-button" data-detail-action="智能优化">◎ 智能优化</button><button class="link-button" data-detail-action="插入变量">〔x〕 插入变量</button></div>
+      <div class="label">功能与步骤设置 ${renderInfoTip("这里相当于智能体的系统提示词，用来约束身份、回复边界、转人工规则和工具调用规则。")}<button class="link-button detail-expand" data-editor-action="expand" data-editor-target="agentPromptInput">展开</button></div>
+      <div class="editor-toolbar detail-toolbar" data-toolbar-target="agentPromptInput">
+        <button type="button" data-editor-command="bold" data-editor-target="agentPromptInput" title="加粗">B</button>
+        <button type="button" data-editor-command="heading" data-editor-target="agentPromptInput" title="标题">H</button>
+        <button type="button" data-editor-command="highlight" data-editor-target="agentPromptInput" title="重点标记">▣</button>
+        <button type="button" data-editor-command="insertUnorderedList" data-editor-target="agentPromptInput" title="项目符号">☰</button>
+        <button type="button" data-editor-command="insertOrderedList" data-editor-target="agentPromptInput" title="编号列表">1₂</button>
+        <button type="button" class="link-button" data-editor-action="optimize" data-editor-target="agentPromptInput">◎ 智能优化</button>
+        <button type="button" class="link-button" data-editor-action="variable" data-editor-target="agentPromptInput">〔x〕 插入变量</button>
+      </div>
       <div class="rich-editor detail-prompt" id="agentPromptInput" contenteditable="true">${escapeHtml(draft.prompt)}</div>
       <div class="detail-examples">示例： <b>广告文案大师</b> <b>解梦大师</b></div>
     </div>
-    <div class="form-row detail-range-row"><div class="label">支持使用上下文记录 <span class="subtle">ⓘ</span></div><input class="slider" id="agentContextInput" type="range" min="0" max="40" value="${draft.contextLimit}"><div class="range-labels"><span>0</span><span>40</span></div></div>
-    <div class="form-row switch-row"><div class="label">展示token消耗 <span class="subtle">ⓘ</span></div><span class="switch ${draft.showToken ? "on" : ""}" id="agentShowTokenInput" data-switch></span></div>
-    <div class="form-row"><div class="label">开场白对话 <span class="subtle">ⓘ</span></div><div class="editor-toolbar">☷ 1₂ ▣ ▦⌄</div><div class="rich-editor opening-editor" id="agentOpeningInput" contenteditable="true">${escapeHtml(draft.opening)}</div></div>
-    <div class="form-row quick-question-row"><div class="label">快捷提问 <span class="subtle">ⓘ</span></div><div class="quick-input-line"><input class="input" placeholder="提问内容，例如：帮我写一篇文章，关于春游，字数500字左右"><button class="circle-add" data-detail-action="新增快捷提问">＋</button></div></div>
-    <button class="button primary full-width-detail" data-agent-save-settings>保存设置</button>
-    <button class="button danger full-width-detail" data-modal="deleteAssistant">删除助手</button>`;
+    <div class="form-row detail-range-row"><div class="label">支持使用上下文记录 ${renderInfoTip("控制预览和正式对话可参考的历史消息条数，数值越高上下文越完整，消耗也越高。")}</div><input class="slider" id="agentContextInput" type="range" min="0" max="40" value="${draft.contextLimit}"><div class="range-labels"><span>0</span><span>40</span></div></div>
+    <div class="form-row switch-row"><div class="label">展示token消耗 ${renderInfoTip("开启后，聊天预览会展示 token 消耗、费用估算和调用信息，便于演示成本透明度。")}</div><span class="switch ${draft.showToken ? "on" : ""}" id="agentShowTokenInput" data-switch></span></div>
+    <div class="form-row"><div class="label">开场白对话 ${renderInfoTip("用户进入对话时首先看到的欢迎消息，保存后右侧第一条 AI 消息会同步更新。")}</div><div class="editor-toolbar" data-toolbar-target="agentOpeningInput"><button type="button" data-editor-command="insertUnorderedList" data-editor-target="agentOpeningInput">☷</button><button type="button" data-editor-command="insertOrderedList" data-editor-target="agentOpeningInput">1₂</button><button type="button" data-editor-command="highlight" data-editor-target="agentOpeningInput">▣</button><button type="button" data-editor-action="variable" data-editor-target="agentOpeningInput">▦⌄</button></div><div class="rich-editor opening-editor" id="agentOpeningInput" contenteditable="true">${escapeHtml(draft.opening)}</div></div>
+    <div class="form-row quick-question-row"><div class="label">快捷提问 ${renderInfoTip("给客户一键试问的问题，可快速验证智能体回答效果。")}</div><div class="quick-input-line"><input class="input" id="agentQuickQuestionInput" placeholder="提问内容，例如：帮我写一篇文章，关于春游，字数500字左右"><button class="circle-add" data-agent-add-quick>＋</button></div>${renderAgentQuickQuestions(agent)}</div>
+    <div class="detail-sticky-actions"><button class="button primary full-width-detail" data-agent-save-settings>保存设置</button><button class="button danger full-width-detail" data-modal="deleteAssistant">删除助手</button></div>`;
 }
 
 function renderDetailModelPanel() {
@@ -498,6 +519,14 @@ function renderDetailModelPanel() {
     <div class="model-list-title">推荐模型</div>
     ${models.length ? models.map((name) => `<button class="model-option ${draft.model === name ? "active" : ""}" data-detail-model="${escapeHtml(name)}"><span class="model-dot">山</span>${escapeHtml(name)}<span>${draft.model === name ? "✓" : ""}</span></button>`).join("") : `<div class="dashed-empty compact-empty"><span>暂无匹配模型</span></div>`}
   </div>`;
+}
+
+function renderAgentQuickQuestions(agent) {
+  const items = state.agentQuickQuestions?.[agent.id] || [];
+  if (!items.length) return "";
+  return `<div class="quick-question-list">${items
+    .map((item) => `<button type="button" data-agent-use-quick="${escapeHtml(item)}">${escapeHtml(item)}</button>`)
+    .join("")}</div>`;
 }
 
 function renderKnowledgeConfig() {
@@ -521,8 +550,8 @@ function renderSkillConfig() {
   const agent = getSelectedAgent();
   const bound = skills.filter((skill) => agent.skillIds.includes(skill.id));
   return `
-    <div class="toolbar" style="margin-bottom:12px"><h3>技能设置 ⓘ</h3></div>
-    <div style="display:flex; gap:8px; margin-bottom:14px"><button class="button dark" data-modal="importSkill">⇩ 导入技能</button><button class="button" data-demo-action="打开技能模板">▦ 技能模板</button></div>
+    <div class="toolbar" style="margin-bottom:12px"><h3>技能设置 ${renderInfoTip("导入后，智能体会在对话中按触发条件调用对应技能，例如留资发送、转人工或停止回复。")}</h3></div>
+    <div style="display:flex; gap:8px; margin-bottom:14px"><button class="button dark" data-modal="importSkill">⇩ 导入技能</button><button class="button" data-skill-template-jump>▦ 技能模板</button></div>
     ${
       bound.length
         ? bound
@@ -604,8 +633,12 @@ function renderChatPreview() {
     </div>
     <div class="chat-input">
       <textarea id="assistantInput" placeholder="请输入对话内容"></textarea>
-      <div style="display:flex; justify-content:space-between; align-items:center">
-        <span class="subtle">□ ＠ ❖</span>
+      <div class="chat-input-tools">
+        <span>
+          <button type="button" class="chat-tool-btn" data-chat-tool="file" title="上传附件">□</button>
+          <button type="button" class="chat-tool-btn" data-chat-tool="mention" title="插入 @ 人工客服">＠</button>
+          <button type="button" class="chat-tool-btn" data-chat-tool="tool" title="调用工具">❖</button>
+        </span>
         <button class="button primary" id="assistantSend">➤</button>
       </div>
     </div>`;

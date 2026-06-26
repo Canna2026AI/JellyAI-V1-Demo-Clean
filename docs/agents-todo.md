@@ -11,6 +11,9 @@ AI 智能体模块当前已经接入本地 Node 后端，可用于真实 Demo �
 - 前端服务层：`services/agentsService.js`
 - 智能体列表、创建、详情、编辑、启用、停用、删除
 - 知识库绑定和解除
+- 知识库文件上传、文本识别、逐行向量/分段向量预览
+- 知识库自定义分段规则保存和预览刷新
+- 知识库确认创建并写入本地数据库
 - 技能创建、编辑、删除、导入和解除
 - 工具创建、选择和解除
 - 模型配置保存
@@ -54,6 +57,9 @@ PORT=3127 npm start
 - `DELETE /api/agents/:id/tools/:toolId`：解除工具绑定。
 - `PATCH /api/agents/:id/model-config`：保存模型、上下文条数、token 展示、提示词和开场白。
 - `GET /api/knowledge-bases`：获取知识库列表。
+- `POST /api/knowledge-bases`：根据上传文件和分段结果创建知识库。
+- `POST /api/knowledge-bases/uploads`：上传知识库文件内容，写入 `knowledgeUploads` 并返回分段预览。
+- `PATCH /api/knowledge-bases/uploads/:id/segmentation`：更新向量方式、分段方式和自定义清洗规则并重新生成预览。
 - `DELETE /api/knowledge-bases/:id`：删除知识库并清理智能体绑定。
 - `GET /api/skills`：获取技能列表。
 - `POST /api/skills`：创建技能。
@@ -70,6 +76,7 @@ PORT=3127 npm start
 - `integrations`：可选渠道集成。
 - `agents`：智能体主数据，包含模型配置、绑定关系、成员、意图和预览消息。
 - `knowledgeBases`：知识库。
+- `knowledgeUploads`：知识库上传文件、识别文本、分段配置和预览片段。
 - `skills`：技能。
 - `tools`：工具市场列表。
 - `toolOptions`：智能体详情页可选择的工具。
@@ -111,16 +118,19 @@ PORT=3127 npm start
 - 企业微信 SDK：加好友、群消息、私聊消息、群聊创建、成员同步。
 - 搜索和工具 SDK：Bing 搜索、Webhook、OCR、文档解析。
 - 文件解析 SDK：xlsx、pdf、docx、txt、html 知识库导入。
+- 向量化 SDK：接入 embedding 模型，正式生成向量并写入向量数据库。
 
 ### 对象存储
 
 - 知识库原始文件、聊天附件、导入模板和工具执行产物放入对象存储。
+- 当前本地 Demo 只保存识别文本和片段预览，生产环境必须保存原始文件对象 key。
 - 文件表保存对象 key、hash、大小、mime type、上传者、团队和生命周期策略。
 - 私有文件使用短期签名 URL 下载。
 
 ### Redis
 
 - 保存聊天短期上下文、工具执行锁、幂等 key、异步任务状态。
+- 知识库大文件解析和向量化任务需要 Redis 队列状态与重试记录。
 - 缓存模型列表、工具目录、团队权限摘要。
 - Webhook 重试队列、限流计数和任务去重可使用 Redis。
 

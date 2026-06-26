@@ -8,11 +8,16 @@ function renderStandaloneKnowledge() {
 }
 
 function renderKnowledgeCreatePage() {
+  ensureKnowledgeCreateState();
   return `
     <section class="module-layout knowledge-create-shell">
       ${renderAiSubnav("knowledge")}
       <div class="knowledge-create-page">
-        <div class="knowledge-breadcrumb">自有知识库  ›  新增知识库</div>
+        <div class="knowledge-breadcrumb">
+          <button type="button" data-knowledge-breadcrumb="list">自有知识库</button>
+          <span>›</span>
+          <button type="button" data-knowledge-breadcrumb="create">新增知识库</button>
+        </div>
         <div class="knowledge-create-body">
           ${renderKnowledgeCreateStepper()}
           <div class="knowledge-work-area">${renderKnowledgeCreateContent()}</div>
@@ -32,10 +37,10 @@ function renderKnowledgeCreateStepper() {
       .map((label, index) => {
         const n = index + 1;
         const status = state.knowledgeCreateStep === n ? "active" : state.knowledgeCreateStep > n ? "done" : "";
-        return `<div class="k-step ${status}">
+        return `<button class="k-step ${status}" type="button" data-knowledge-step-jump="${n}">
           <span class="k-step-circle">${state.knowledgeCreateStep > n ? "✓" : n}</span>
           <span>${label}</span>
-        </div>`;
+        </button>`;
       })
       .join("")}
   </aside>`;
@@ -138,13 +143,19 @@ function renderWebsiteUploadStep() {
 }
 
 function renderFileUploadStep() {
+  const file = state.knowledgeUploadedFile;
   return `<div class="knowledge-form-panel">
-    <div class="upload-drop knowledge-file-drop" data-knowledge-file-upload>
-      <b>将文件拖拽至此区域或 <span>选择文件上传</span></b>
+    <div class="upload-drop knowledge-file-drop ${state.knowledgeUploading ? "uploading" : ""}" data-knowledge-file-upload>
+      <input type="file" data-knowledge-file-input accept=".xlsx,.xls,.csv,.txt,.md,.json,.pdf,.doc,.docx,.ppt,.pptx,.html" hidden>
+      ${
+        file
+          ? `<div class="knowledge-uploaded-file"><span class="excel-file-icon">${escapeHtml(file.icon || knowledgeFileIcon(file.name))}</span><div><b>${escapeHtml(file.name)}</b><p>${formatKnowledgeFileSize(file.size)} · 已上传到本地知识库数据库</p></div></div><button class="button" type="button" data-knowledge-reupload>重新上传</button>`
+          : `<b>${state.knowledgeUploading ? "正在上传并识别文件..." : "将文件拖拽至此区域或"} <span>${state.knowledgeUploading ? "" : "选择文件上传"}</span></b>
       <p>仅支持：EXCEL, PDF, DOCX, PPTX, JSON, CSV, EPUB, MD, MBOX, EML, HTML, TXT,<br>
       DOT, WPS, WPT, DOCM, DOTM, POTX, PPS, PPSX, DPS, DPT, PPTM, POTM, PPSM, XLT,<br>
       ET, ETT, XLSM, XLTM, LRC, C, CPP, H, ASM, S, JAVA, BAT, BAS, PRG, CMD格式。导入的数据<br>
-      摘要单个大小20MB以内，EXCEL、CSV单个大小5M以内。</p>
+      摘要单个大小20MB以内，EXCEL、CSV单个大小5M以内。</p>`
+      }
     </div>
   </div>`;
 }
@@ -158,7 +169,9 @@ const knowledgePreviewChunks = [
 ];
 
 function renderSegmentStep() {
+  ensureKnowledgeCreateState();
   const custom = state.knowledgeSegmentMode === "custom";
+  const file = state.knowledgeUploadedFile || { name: "请先上传文件", size: 0, icon: "文" };
   return `<div class="segment-layout knowledge-vector-layout">
     <div class="segment-main">
       <div class="knowledge-vector-intro">
@@ -168,8 +181,8 @@ function renderSegmentStep() {
         </p>
       </div>
       <div class="knowledge-file-meta">
-        <span class="excel-file-icon">X</span>
-        <div><b>物流问答库.xlsx</b><small>0.01M</small></div>
+        <span class="excel-file-icon">${escapeHtml(file.icon || knowledgeFileIcon(file.name))}</span>
+        <div><b>${escapeHtml(file.name)}</b><small>${formatKnowledgeFileSize(file.size)}</small></div>
         <label class="vector-radio"><input type="radio" name="knowledge-vector" data-vector-mode="row" ${state.knowledgeVectorMode === "row" ? "checked" : ""}> 逐行向量</label>
         <label class="vector-radio"><input type="radio" name="knowledge-vector" data-vector-mode="segment" ${state.knowledgeVectorMode === "segment" ? "checked" : ""}> 分段向量</label>
       </div>
@@ -195,28 +208,30 @@ function renderSegmentStep() {
 }
 
 function renderCustomSegmentSettings() {
+  ensureKnowledgeCreateState();
+  const config = state.knowledgeCustomSegment;
   const rules = [
-    "替换掉连续的空格，换行符和制表符",
-    "删除所有URL",
-    "删除所有电子邮件地址",
-    "删除所有电话号码",
-    "删除身份证号码",
-    "删除银行卡号码",
+    ["trimSpaces", "替换掉连续的空格，换行符和制表符"],
+    ["removeUrls", "删除所有URL"],
+    ["removeEmails", "删除所有电子邮件地址"],
+    ["removePhones", "删除所有电话号码"],
+    ["removeIds", "删除身份证号码"],
+    ["removeCards", "删除银行卡号码"],
   ];
   return `<div class="segment-expanded-body">
     <div class="form-row">
       <div class="label"><span style="color:var(--red)">*</span> 分段标识符</div>
-      <input class="input" style="width:100%" value="\\n" placeholder="请输入">
+      <input class="input" style="width:100%" data-segment-delimiter value="${escapeHtml(config.delimiter)}" placeholder="请输入">
       <div class="hint">通过您输入的标识符对数据集内容进行切割分段，支持输入文本、数字、符号、字符串转义符，如：\\n</div>
     </div>
     <div class="form-row">
       <div class="label"><span style="color:var(--red)">*</span> 分段最大长度</div>
-      <input class="input" style="width:100%" value="2000" placeholder="请输入">
+      <input class="input" style="width:100%" data-segment-max-length value="${escapeHtml(config.maxLength)}" placeholder="请输入">
       <div class="hint">对您提供的数据集进行分割，便于向量化处理，分段最大长度为2000，最小长度为800。</div>
     </div>
     <div class="label">文本预处理规则</div>
     <div class="rule-list">
-      ${rules.map((rule, index) => `<label><input type="checkbox" ${index === 0 ? "checked" : ""}> ${rule}</label>`).join("")}
+      ${rules.map(([key, rule]) => `<label><input type="checkbox" data-segment-rule="${key}" ${config.rules?.[key] ? "checked" : ""}> ${rule}</label>`).join("")}
     </div>
     <div class="segment-actions">
       <button class="button" data-reset-segment>重置</button>
@@ -226,24 +241,41 @@ function renderCustomSegmentSettings() {
 }
 
 function renderSegmentPreview(custom) {
-  if (!custom) return "";
-  const chunks = state.knowledgePreview ? knowledgePreviewChunks : knowledgePreviewChunks;
+  const chunks = state.knowledgeUploadPreview?.length ? state.knowledgeUploadPreview : knowledgePreviewChunks.map(([id, count, text]) => ({
+    id,
+    count,
+    text,
+    vectorType: state.knowledgeVectorMode === "segment" ? "分段向量" : "逐行向量",
+    segmentMode: custom ? "自定义" : "自动分段与清洗",
+    relation: `${custom ? "自定义分段" : "自动分段"} → 1 条向量`,
+  }));
+  if (!chunks.length) return `<div class="preview-empty subtle">上传文件后将显示自动分段、逐行向量或分段向量关系。</div>`;
   return chunks
     .map(
-      ([id, count, text]) => `<div class="preview-chunk">
-        <div class="preview-chunk-head"><span>${id}</span><span>${count}</span></div>
-        <div>${text}</div>
+      (chunk) => `<div class="preview-chunk">
+        <div class="preview-chunk-head"><span>${escapeHtml(chunk.id)}</span><span>${escapeHtml(chunk.count)}</span></div>
+        <div>${escapeHtml(chunk.text)}</div>
+        <small>${escapeHtml(chunk.vectorType || "")} · ${escapeHtml(chunk.segmentMode || "")}</small>
+        <em>${escapeHtml(chunk.relation || "")}</em>
       </div>`
     )
     .join("");
 }
 
 function renderKnowledgeCompleteStep() {
+  ensureKnowledgeCreateState();
+  const defaultName = state.knowledgeUploadedFile?.name?.replace(/\.[^.]+$/, "") || "物流问答";
   return `<div class="knowledge-complete">
+    <div class="complete-icon">✓</div>
     <h3>知识库创建完成</h3>
+    <div class="complete-summary">
+      <div><span class="subtle">文件</span><b>${escapeHtml(state.knowledgeUploadedFile?.name || "未上传文件")}</b></div>
+      <div><span class="subtle">向量方式</span><b>${state.knowledgeVectorMode === "segment" ? "分段向量" : "逐行向量"}</b></div>
+      <div><span class="subtle">片段数量</span><b>${state.knowledgeUploadPreview?.length || 0} 条</b></div>
+    </div>
     <div class="form-row" style="width:100%">
       <div class="label">知识库名称 <span style="color:var(--red)">*</span></div>
-      <input class="input" style="width:100%" placeholder="请输入知识库名称" value="物流问答">
+      <input class="input" id="knowledgeBaseNameInput" style="width:100%" placeholder="请输入知识库名称" value="${escapeHtml(defaultName)}">
     </div>
   </div>`;
 }

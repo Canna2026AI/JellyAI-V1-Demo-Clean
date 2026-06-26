@@ -1,26 +1,70 @@
 // Knowledge base page events.
 
 function bindKnowledgeEvents() {
+  ensureKnowledgeCreateState();
+  document.querySelectorAll("[data-assistant-sub]").forEach((el) =>
+    el.addEventListener("click", () => setState({ page: "ai", selectedAssistant: null, assistantSub: el.dataset.assistantSub }))
+  );
+  document.querySelectorAll("[data-knowledge-breadcrumb]").forEach((el) =>
+    el.addEventListener("click", () => {
+      if (el.dataset.knowledgeBreadcrumb === "list") {
+        setState({ page: "ai", assistantSub: "knowledge" });
+      }
+    })
+  );
 document.querySelectorAll("[data-knowledge-type]").forEach((el) =>
-    el.addEventListener("click", () => setState({ knowledgeCreateType: el.dataset.knowledgeType, knowledgeVectorMode: "row", knowledgeSegmentMode: "auto", knowledgePreview: false }))
+    el.addEventListener("click", () => setState({
+      knowledgeCreateType: el.dataset.knowledgeType,
+      knowledgeVectorMode: "row",
+      knowledgeSegmentMode: "auto",
+      knowledgePreview: false,
+      knowledgeUploadedFile: null,
+      knowledgeUploadPreview: [],
+      knowledgeUploadId: "",
+    }))
   );
   document.querySelectorAll("[data-segment-mode]").forEach((el) =>
     el.addEventListener("click", (event) => {
       if (event.target.closest("input, button, a")) return;
       const mode = el.dataset.segmentMode;
-      setState({ knowledgeSegmentMode: mode, knowledgePreview: mode === "custom" });
+      void updateKnowledgeSegmentation({ segmentMode: mode });
     })
   );
   document.querySelectorAll("[data-vector-mode]").forEach((el) =>
-    el.addEventListener("change", () => setState({ knowledgeVectorMode: el.dataset.vectorMode, knowledgeSegmentMode: "auto", knowledgePreview: false }))
+    el.addEventListener("change", () => void updateKnowledgeSegmentation({ vectorMode: el.dataset.vectorMode }))
   );
   const knowledgeFileUpload = document.querySelector("[data-knowledge-file-upload]");
-  if (knowledgeFileUpload) knowledgeFileUpload.addEventListener("click", () => {
-    showToast("物流问答库.xlsx 上传成功，已进入数据处理");
-    setState({ knowledgeCreateStep: 3, knowledgeVectorMode: "row", knowledgeSegmentMode: "auto", knowledgePreview: false });
+  const knowledgeFileInput = document.querySelector("[data-knowledge-file-input]");
+  if (knowledgeFileUpload && knowledgeFileInput) {
+    knowledgeFileUpload.addEventListener("click", (event) => {
+      if (event.target.closest("[data-knowledge-reupload]") || event.target === knowledgeFileInput) return;
+      knowledgeFileInput.click();
+    });
+    knowledgeFileUpload.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      knowledgeFileUpload.classList.add("dragover");
+    });
+    knowledgeFileUpload.addEventListener("dragleave", () => knowledgeFileUpload.classList.remove("dragover"));
+    knowledgeFileUpload.addEventListener("drop", (event) => {
+      event.preventDefault();
+      knowledgeFileUpload.classList.remove("dragover");
+      void uploadKnowledgeFile(event.dataTransfer.files?.[0]);
+    });
+    knowledgeFileInput.addEventListener("change", () => void uploadKnowledgeFile(knowledgeFileInput.files?.[0]));
+  }
+  document.querySelector("[data-knowledge-reupload]")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    document.querySelector("[data-knowledge-file-input]")?.click();
   });
   const templateDownload = document.querySelector("[data-template-download]");
   if (templateDownload) templateDownload.addEventListener("click", () => showToast("正在下载逐行向量示例文件"));
+  document.querySelectorAll("[data-knowledge-step-jump]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const step = Number(el.dataset.knowledgeStepJump);
+      if (step > state.knowledgeCreateStep) return;
+      setState({ knowledgeCreateStep: step });
+    })
+  );
   const knowledgePrev = document.querySelector("[data-knowledge-prev]");
   if (knowledgePrev) {
     knowledgePrev.addEventListener("click", () => {
@@ -38,9 +82,12 @@ document.querySelectorAll("[data-knowledge-type]").forEach((el) =>
         showToast("请选择内容类型");
         return;
       }
+      if (state.knowledgeCreateStep === 2 && state.knowledgeCreateType === "文档文件" && !state.knowledgeUploadedFile) {
+        showToast("请先上传文件");
+        return;
+      }
       if (state.knowledgeCreateStep === 4) {
-        showToast("知识库创建完成");
-        setState({ page: "ai", assistantSub: "knowledge", knowledgeCreateStep: 1, knowledgeCreateType: "", knowledgeVectorMode: "row", knowledgeSegmentMode: "auto", knowledgePreview: false });
+        void finishKnowledgeCreate();
         return;
       }
       setState({
@@ -52,12 +99,20 @@ document.querySelectorAll("[data-knowledge-type]").forEach((el) =>
   const generatePreview = document.querySelector("[data-generate-preview]");
   if (generatePreview) generatePreview.addEventListener("click", (event) => {
     event.stopPropagation();
-    setState({ knowledgePreview: true });
+    captureKnowledgeCustomSegment();
+    void updateKnowledgeSegmentation({ segmentMode: "custom" });
   });
   const resetSegment = document.querySelector("[data-reset-segment]");
   if (resetSegment) resetSegment.addEventListener("click", (event) => {
     event.stopPropagation();
-    setState({ knowledgePreview: false });
+    setState({
+      knowledgeCustomSegment: {
+        delimiter: "\\n",
+        maxLength: 2000,
+        rules: { trimSpaces: true, removeUrls: false, removeEmails: false, removePhones: false, removeIds: false, removeCards: false },
+      },
+      knowledgePreview: true,
+    });
   });
 }
 

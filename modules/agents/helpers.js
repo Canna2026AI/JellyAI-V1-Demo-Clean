@@ -6,6 +6,7 @@ function ensureAgentState() {
   if (!state.agentStatusFilter) state.agentStatusFilter = "all";
   if (!state.agentKnowledgeSearchQuery) state.agentKnowledgeSearchQuery = "";
   if (!state.skillSearchQuery) state.skillSearchQuery = "";
+  if (!state.skillChannelFilter) state.skillChannelFilter = "all";
   if (!state.aiToolSearchQuery) state.aiToolSearchQuery = "";
   if (!state.importSkillSearchQuery) state.importSkillSearchQuery = "";
   if (!state.agentToolPickerSearchQuery) state.agentToolPickerSearchQuery = "";
@@ -15,6 +16,8 @@ function ensureAgentState() {
   if (!state.selectedAgentId && state.selectedAssistant) state.selectedAgentId = state.selectedAssistant;
   if (!state.agentModalSelection) state.agentModalSelection = [];
   if (!state.agentToolSelection) state.agentToolSelection = [];
+  if (!state.agentQuickQuestions) state.agentQuickQuestions = {};
+  if (typeof state.pendingSkillTool !== "boolean") state.pendingSkillTool = false;
   if (!state.agentChatLoading) state.agentChatLoading = false;
   if (typeof state.agentBackendLoaded !== "boolean") state.agentBackendLoaded = false;
   if (typeof state.agentBackendLoading !== "boolean") state.agentBackendLoading = false;
@@ -103,8 +106,9 @@ function getFilteredSkills() {
   const query = state.skillSearchQuery.trim().toLowerCase();
   return skills.filter((skill) => {
     const matchesFilter = state.skillFilter === "all" || skill.source === state.skillFilter;
+    const matchesChannel = state.skillChannelFilter === "all" || skill.channel === state.skillChannelFilter;
     const matchesQuery = !query || `${skill.name} ${skill.desc} ${skill.channel}`.toLowerCase().includes(query);
-    return matchesFilter && matchesQuery;
+    return matchesFilter && matchesChannel && matchesQuery;
   });
 }
 
@@ -187,9 +191,14 @@ function buildLocalAgent(payload) {
 }
 
 async function createAgentFromForm() {
+  const name = document.getElementById("newAssistantName")?.value.trim() || "";
+  if (!name) {
+    showToast("请输入助手名称");
+    return;
+  }
   const payload = {
-    name: document.getElementById("newAssistantName")?.value.trim() || "新建助手",
-    description: document.getElementById("newAssistantDesc")?.value.trim() || "用于新的客户服务场景",
+    name,
+    description: document.getElementById("newAssistantDesc")?.value.trim() || "未填写助手描述",
     model: document.getElementById("newAssistantModel")?.value || aiAgentModels[0],
     opening: document.getElementById("newAssistantOpening")?.value.trim() || "您好，我是您的智能助手，请问需要什么帮助？",
     prompt: "请在此补充助手的功能与步骤设置。",
@@ -316,7 +325,7 @@ async function saveSkillFromEditor() {
   const name = document.getElementById("skillNameInput")?.value.trim() || "未命名技能";
   const desc = document.getElementById("skillDescInput")?.value.trim() || "用于补充智能体执行能力";
   const prompt = document.getElementById("skillPromptInput")?.textContent.trim() || "请描述技能触发条件与执行步骤。";
-  const payload = { name, desc, prompt, channel: existing?.channel || "通用", source: existing?.source || "mine", icon: existing?.icon || "AI", tool: Boolean(existing?.tool) };
+  const payload = { name, desc, prompt, channel: existing?.channel || "通用", source: existing?.source || "mine", icon: existing?.icon || "AI", tool: Boolean(existing?.tool || state.pendingSkillTool) };
   const api = getAgentApi();
   try {
     if (existing) {
@@ -345,6 +354,7 @@ async function saveSkillFromEditor() {
   state.page = "ai";
   state.assistantSub = "skill";
   state.selectedSkillId = null;
+  state.pendingSkillTool = false;
   state.skillFilter = "all";
   state.skillSearchQuery = "";
   render();
@@ -475,4 +485,105 @@ function generateAgentReply(agent, text) {
     text: `已收到：“${text}”。我会基于当前助手的模型、知识库、技能和工具配置生成回复。`,
     meta: `${agent.model} · ${hasKnowledge ? "已检索知识库" : "未绑定知识库"} · ${hasTools ? "可调用工具" : "未添加工具"} · 消耗 token：352`,
   };
+}
+
+function insertTextIntoEditor(editor, text) {
+  if (!editor) return;
+  editor.focus();
+  document.execCommand("insertText", false, text);
+}
+
+function handleEditorCommand(command, targetId) {
+  const editor = document.getElementById(targetId);
+  if (!editor) return;
+  editor.focus();
+  if (command === "heading") {
+    document.execCommand("formatBlock", false, "h3");
+    showToast("已应用标题格式");
+    return;
+  }
+  if (command === "highlight") {
+    const selection = window.getSelection?.().toString();
+    if (selection) document.execCommand("insertHTML", false, `<mark>${escapeHtml(selection)}</mark>`);
+    else insertTextIntoEditor(editor, "【重点】");
+    showToast("已插入重点标记");
+    return;
+  }
+  document.execCommand(command, false, null);
+  showToast("编辑格式已应用");
+}
+
+function handleEditorAction(action, targetId) {
+  const editor = document.getElementById(targetId);
+  if (!editor) return;
+  if (action === "variable") {
+    insertTextIntoEditor(editor, "{{客户问题}}");
+    showToast("变量已插入");
+    return;
+  }
+  if (action === "optimize") {
+    const text = editor.textContent.trim();
+    const addition = "请优先识别用户意图；如命中知识库则引用知识回答；如用户要求报价、合同、投诉或明确要求人工，请触发转人工流程。";
+    editor.textContent = text && !text.includes("优先识别用户意图") ? `${text}\n\n${addition}` : addition;
+    showToast("提示词已智能优化");
+    return;
+  }
+  if (action === "expand") {
+    editor.classList.toggle("expanded");
+    showToast(editor.classList.contains("expanded") ? "编辑区已展开" : "编辑区已收起");
+  }
+}
+
+function insertAssistantInputText(text) {
+  const input = document.getElementById("assistantInput");
+  if (!input) return;
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  input.value = `${input.value.slice(0, start)}${text}${input.value.slice(end)}`;
+  input.focus();
+  const next = start + text.length;
+  input.setSelectionRange(next, next);
+}
+
+function handleChatTool(tool) {
+  const agent = getSelectedAgent();
+  if (tool === "mention") {
+    insertAssistantInputText("@人工客服 ");
+    showToast("已插入人工客服提醒");
+    return;
+  }
+  if (tool === "tool") {
+    const firstTool = aiAgentToolOptions.find((item) => agent?.toolIds?.includes(item.id));
+    insertAssistantInputText(firstTool ? `请调用${firstTool.name}的${firstTool.action}能力，` : "请调用已配置工具，");
+    showToast(firstTool ? `已准备调用：${firstTool.name}` : "当前助手未添加工具，可在工具 Tab 中添加");
+    return;
+  }
+  if (tool === "file") {
+    const picker = document.createElement("input");
+    picker.type = "file";
+    picker.accept = ".txt,.md,.csv,.json,.pdf,.doc,.docx,.xlsx";
+    picker.addEventListener("change", () => {
+      const file = picker.files?.[0];
+      if (!file) return;
+      insertAssistantInputText(`已上传附件：${file.name}，请读取并总结。`);
+      showToast(`${file.name} 已附加到聊天预览`);
+    });
+    picker.click();
+  }
+}
+
+function addAgentQuickQuestion() {
+  const agent = getSelectedAgent();
+  const input = document.getElementById("agentQuickQuestionInput");
+  const text = input?.value.trim();
+  if (!agent || !text) {
+    showToast("请输入快捷提问内容");
+    return;
+  }
+  if (!state.agentQuickQuestions) state.agentQuickQuestions = {};
+  const current = state.agentQuickQuestions[agent.id] || [];
+  state.agentQuickQuestions[agent.id] = Array.from(new Set([...current, text])).slice(-8);
+  input.value = "";
+  showToast("快捷提问已添加");
+  render();
 }

@@ -83,6 +83,15 @@
     listKnowledgeBases() {
       return request("/knowledge-bases");
     },
+    createKnowledgeBase(payload) {
+      return request("/knowledge-bases", { method: "POST", body: payload });
+    },
+    uploadKnowledgeFile(payload) {
+      return request("/knowledge-bases/uploads", { method: "POST", body: payload });
+    },
+    updateKnowledgeUpload(uploadId, payload) {
+      return request(`/knowledge-bases/uploads/${encodeURIComponent(uploadId)}/segmentation`, { method: "PATCH", body: payload });
+    },
     deleteKnowledgeBase(id) {
       return request(`/knowledge-bases/${encodeURIComponent(id)}`, { method: "DELETE" });
     },
