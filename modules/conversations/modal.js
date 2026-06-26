@@ -2,19 +2,40 @@
 
 function renderConversationModal() {
   if (!state.modal) return "";
-if (state.modal === "customView") {
+  if (state.modal === "conversationConfirm") {
+    return renderConversationConfirmModal();
+  }
+  if (state.modal === "customView") {
     return renderCustomViewModal();
   }
 
-if (state.modal === "quickGroup") {
+  if (state.modal === "quickGroup") {
     return renderQuickGroupModal();
   }
 
-if (state.modal === "quickReply") {
+  if (state.modal === "quickReply") {
     return renderQuickReplyModal();
   }
 
+  if (state.modal === "conversationMembers") {
+    return renderConversationMembersModal();
+  }
+
   return "";
+}
+
+function renderConversationConfirmModal() {
+  const confirm = state.conversationConfirm || {};
+  window.__modalOk = () => {
+    window.__conversationConfirmAction?.();
+    window.__conversationConfirmAction = null;
+    state.conversationConfirm = null;
+  };
+  return `<div class="modal-backdrop"><div class="modal conversation-confirm-modal">
+    <div class="modal-head">${escapeHtml(confirm.title || "确认操作")}<button class="button ghost" data-conversation-confirm-cancel>×</button></div>
+    <div class="modal-body">${escapeHtml(confirm.body || "请确认是否继续。")}</div>
+    <div class="modal-foot"><button class="button" data-conversation-confirm-cancel>取消</button><button class="button primary" data-modal-ok>${escapeHtml(confirm.okText || "确认")}</button></div>
+  </div></div>`;
 }
 
 function renderQuickReplyModal() {
@@ -41,19 +62,77 @@ function renderQuickReplyModal() {
           <button type="button" data-quick-format="formatBlock" data-format-value="h3">H</button>
           <button type="button" data-quick-format="bold"><b>B</b></button>
           <button type="button" data-quick-format="italic"><i>I</i></button>
-          <button type="button" data-quick-format="strikeThrough">S̶</button><i></i>
-          <button type="button" data-quick-format="insertUnorderedList">☷</button>
-          <button type="button" data-quick-format="insertOrderedList">1₂</button><i></i>
-          <button type="button" data-quick-format="outdent">≡</button>
-          <button type="button" data-quick-format="indent">≡</button><i></i>
-          <button type="button" title="插入链接">↗</button><button type="button" title="插入图片">▣</button><button type="button" title="插入表格">▦⌄</button><button type="button" title="插入内容">▧⌄</button><i></i>
-          <button type="button" class="muted" data-quick-format="undo">↶</button><button type="button" class="muted" data-quick-format="redo">↷</button>
+          <button type="button" data-quick-format="strikeThrough">S</button><i></i>
+          <button type="button" data-quick-format="insertUnorderedList">列表</button>
+          <button type="button" data-quick-format="insertOrderedList">编号</button><i></i>
+          <button type="button" data-quick-format="outdent">外移</button>
+          <button type="button" data-quick-format="indent">缩进</button><i></i>
+          <button type="button" data-quick-insert-token="link" title="插入链接">链接</button><button type="button" data-quick-insert-token="image" title="插入图片">图片</button><button type="button" data-quick-insert-token="table" title="插入表格">表格</button><button type="button" data-quick-insert-token="variable" title="插入变量">变量</button><i></i>
+          <button type="button" class="muted" data-quick-format="undo">撤销</button><button type="button" class="muted" data-quick-format="redo">重做</button>
         </div>
         <div id="quickReplyContent" class="quick-reply-editor-content" contenteditable="true" data-quick-reply-required></div>
       </div>
     </div>
     <div class="quick-reply-foot"><button class="button" type="button" data-close-modal>取消</button><button class="button primary" type="button" data-modal-ok disabled>保存</button></div>
   </div></div>`;
+}
+
+function renderConversationMembersModal() {
+  const conv = getSelectedConversation();
+  const members = getFilteredConversationMembers(conv);
+  const selectedMember = getSelectedConversationMember(conv);
+  return `<div class="modal-backdrop group-members-backdrop">
+    <div class="modal group-members-modal" role="dialog" aria-modal="true" aria-labelledby="conversationMembersTitle">
+      <div class="group-members-head">
+        <div><b id="conversationMembersTitle">群成员</b><span>${escapeHtml(conv?.name || "当前会话")} · ${getConversationMembers(conv).length} 人</span></div>
+        <button type="button" data-close-modal aria-label="关闭">×</button>
+      </div>
+      <div class="group-members-body">
+        <section class="group-member-list-pane">
+          <label class="group-member-search"><span class="search-glyph"></span><input data-group-member-search value="${escapeHtml(state.conversationMemberSearch || "")}" placeholder="搜索群成员、公司、手机号"></label>
+          <div class="group-member-grid">
+            ${members.length ? members.map((member) => renderConversationMemberCard(member, selectedMember?.id === member.id)).join("") : `<div class="group-member-empty">未找到匹配成员</div>`}
+          </div>
+        </section>
+        <section class="group-member-detail">
+          ${selectedMember ? renderConversationMemberDetail(selectedMember) : `<div class="group-member-empty">请选择成员查看详情</div>`}
+        </section>
+      </div>
+      <div class="group-members-foot">
+        <button class="button" type="button" data-close-modal>关闭</button>
+        <button class="button primary" type="button" data-insert-member-mention="${escapeHtml(selectedMember?.id || "")}" ${selectedMember ? "" : "disabled"}>插入 @ 成员</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderConversationMemberCard(member, active) {
+  return `<button class="group-member-card ${active ? "active" : ""}" type="button" data-member-select="${escapeHtml(member.id)}">
+    <span class="group-member-avatar">${escapeHtml(member.avatar || member.name.slice(0, 1))}</span>
+    <b>${escapeHtml(member.name)}</b>
+    <small>${escapeHtml(member.role || "成员")}</small>
+  </button>`;
+}
+
+function renderConversationMemberDetail(member) {
+  const tags = Array.isArray(member.tags) ? member.tags : [];
+  return `<div class="group-member-profile">
+    <div class="group-member-profile-head">
+      <span class="group-member-avatar large">${escapeHtml(member.avatar || member.name.slice(0, 1))}</span>
+      <div><b>${escapeHtml(member.name)}</b><span>${escapeHtml(member.role || "成员")} · ${escapeHtml(member.lastActive || "-")}</span></div>
+    </div>
+    <div class="group-member-tags">${tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("") || "<span>暂无标签</span>"}</div>
+    <table>
+      <tr><td>备注</td><td>${escapeHtml(member.remark || "-")}</td></tr>
+      <tr><td>公司</td><td>${escapeHtml(member.company || "-")}</td></tr>
+      <tr><td>城市</td><td>${escapeHtml(member.city || "-")}</td></tr>
+      <tr><td>手机号</td><td>${escapeHtml(member.phone || "-")}</td></tr>
+    </table>
+    <div class="group-member-actions">
+      <button class="button" type="button" data-toggle-member-tag="${escapeHtml(member.id)}">标记重点成员</button>
+      <button class="button" type="button" data-copy-member-phone="${escapeHtml(member.phone || "")}" ${member.phone && member.phone !== "-" ? "" : "disabled"}>复制手机号</button>
+    </div>
+  </div>`;
 }
 
 function renderQuickGroupModal() {
@@ -133,7 +212,7 @@ function renderCustomViewModal() {
     <div class="view-steps">
       ${stepLabel(1, "基本信息")}<b>›</b>${stepLabel(2, "访问权限")}<b>›</b>${stepLabel(3, "筛选条件")}
     </div>
-    <div class="modal-body custom-view-body">${body}<a class="learn-link">了解更多</a></div>
+    <div class="modal-body custom-view-body">${body}<a class="learn-link" data-demo-action="自定义视图说明">了解更多</a></div>
     <div class="modal-foot">
       ${step > 1 ? `<button class="button" data-custom-view-prev>上一步</button>` : `<button class="button" data-close-modal>取消</button>`}
       <button class="button primary${step === 1 && !state.customViewName.trim() ? " disabled" : ""}" data-custom-view-next ${step === 1 && !state.customViewName.trim() ? "disabled" : ""}>${step === 3 ? "确认" : "下一步"}</button>

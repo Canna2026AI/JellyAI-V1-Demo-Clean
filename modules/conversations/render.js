@@ -1,12 +1,11 @@
 // Aggregated conversation module renderers.
 
 function renderChatWorkplace() {
-  if (state.chatSettingsOpen) return renderChatSettings();
-  const conversations = sortConversations(conversationMap[state.chatFilter] || []);
-  const visibleConversations = conversations.filter(matchesConversationSearch);
+  const visibleConversations = getFilteredConversations();
   const hasSelected = !!state.selectedConversation;
+  const settingsMode = state.chatSettingsOpen;
   return `
-    <section class="conversation-shell ${state.chatSidebarCollapsed ? "sidebar-collapsed" : ""}">
+    <section class="conversation-shell ${state.chatSidebarCollapsed ? "sidebar-collapsed" : ""} ${settingsMode ? "settings-inline" : ""}">
       <div class="conv-sidebar">
         ${renderAgentStatusBar()}
         ${conversationFilters
@@ -20,38 +19,58 @@ function renderChatWorkplace() {
           .map((x) => `<div class="subnav-item custom-view-item ${state.chatFilter === x ? "active" : ""}" data-chat-filter="${escapeHtml(x)}"><span></span><b>${escapeHtml(x)}</b></div>`)
           .join("")}
       </div>
-      <div class="conv-list">
-        <div class="conv-list-head">
-          <div class="conv-list-title">
-            <button class="chat-sidebar-toggle" type="button" data-chat-sidebar-toggle aria-label="${state.chatSidebarCollapsed ? "展开对话分类" : "收起对话分类"}" title="${state.chatSidebarCollapsed ? "展开对话分类" : "收起对话分类"}">
-              <span>≡</span><i>${state.chatSidebarCollapsed ? "›" : "‹"}</i>
-            </button>
-            <b>${state.chatFilter}</b>
-          </div>
-          <div class="conv-list-tools">
-            <button class="icon-button conv-sort-button ${state.chatSortOpen ? "active" : ""}" data-chat-sort-toggle title="对话排序">⇅</button>
-            <button class="icon-button ${state.chatSearchOpen ? "active" : ""}" data-chat-search-toggle title="搜索对话">⌕</button>
-            ${state.chatSortOpen ? `
-              <div class="conv-sort-menu">
-                <button class="${state.chatSort === "newest" ? "active" : ""}" data-chat-sort="newest"><span>新消息优先</span><b>✓</b></button>
-                <button class="${state.chatSort === "unread" ? "active" : ""}" data-chat-sort="unread"><span>未读消息优先</span><b>✓</b></button>
-              </div>
-            ` : ""}
-          </div>
-        </div>
-        ${state.chatSearchOpen ? renderConversationSearch() : ""}
-        ${
-          visibleConversations.length
-            ? visibleConversations.map((item) => renderConversationItem(item)).join("")
-            : `<div class="empty" style="min-height:240px">${state.chatSearchQuery.trim() ? "未找到匹配的对话" : `暂无${state.chatFilter}消息`}</div>`
-        }
-        ${renderChannelPromo()}
+      <div class="conv-list ${settingsMode ? "chat-settings-panel" : ""}">
+        ${settingsMode ? renderInlineChatSettingsPanel() : renderConversationListPanel(visibleConversations)}
       </div>
       <div class="conv-main ${hasSelected ? "" : "help-mode"}">
-        ${hasSelected ? renderConversationDetail() : renderConversationGuide()}
+        ${state.chatLoading ? renderConversationLoading() : hasSelected ? renderConversationDetail() : renderConversationGuide()}
       </div>
       ${hasSelected ? renderConversationInfo() : ""}
     </section>`;
+}
+
+function renderConversationListPanel(visibleConversations) {
+  return `
+    <div class="conv-list-head">
+      <div class="conv-list-title">
+        <button class="chat-sidebar-toggle" type="button" data-chat-sidebar-toggle aria-label="${state.chatSidebarCollapsed ? "展开对话分类" : "收起对话分类"}" title="${state.chatSidebarCollapsed ? "展开对话分类" : "收起对话分类"}">
+          <span>≡</span><i>${state.chatSidebarCollapsed ? "›" : "‹"}</i>
+        </button>
+        <b>${state.chatFilter}</b>
+      </div>
+      <div class="conv-list-tools">
+        <button class="icon-button conv-sort-button ${state.chatSortOpen ? "active" : ""}" data-chat-sort-toggle title="对话排序">⇅</button>
+        <button class="icon-button conv-search-button ${state.chatSearchOpen ? "active" : ""}" data-chat-search-toggle title="搜索对话" aria-label="搜索对话"><span class="search-glyph"></span></button>
+        ${state.chatSortOpen ? `
+          <div class="conv-sort-menu">
+            <button class="${state.chatSort === "newest" ? "active" : ""}" data-chat-sort="newest"><span>新消息优先</span><b>✓</b></button>
+            <button class="${state.chatSort === "unread" ? "active" : ""}" data-chat-sort="unread"><span>未读消息优先</span><b>✓</b></button>
+            <button class="${state.chatSort === "status" ? "active" : ""}" data-chat-sort="status"><span>状态排序</span><b>✓</b></button>
+          </div>
+        ` : ""}
+      </div>
+    </div>
+    ${state.chatSearchOpen ? renderConversationSearch() : ""}
+    ${renderConversationRefineBar()}
+    ${
+      visibleConversations.length
+        ? visibleConversations.map((item) => renderConversationItem(item)).join("")
+        : `<div class="empty" style="min-height:240px">${state.chatSearchQuery.trim() ? "未找到匹配的对话" : `暂无${state.chatFilter}消息`}</div>`
+    }
+    ${renderChannelPromo()}
+  `;
+}
+
+function renderInlineChatSettingsPanel() {
+  const tabs = [["automation", "AI自动化"], ["hours", "工作时间"], ["quick", "快捷消息"], ["forward", "消息转发"]];
+  return `
+    <div class="chat-settings-inline-head">
+      <b>聚合对话设置</b>
+      <button class="icon-button small-icon" data-chat-settings title="返回对话">×</button>
+    </div>
+    <nav class="chat-settings-tabs inline">${tabs.map(([id, label]) => `<button class="${state.chatSettingsTab === id ? "active" : ""}" data-chat-settings-tab="${id}">${label}</button>`).join("")}</nav>
+    <div class="chat-settings-content inline">${renderChatSettingsContent()}</div>
+  `;
 }
 
 function renderChatSettings() {
@@ -97,64 +116,62 @@ function renderAgentStatusBar(activeSettings = false) {
 
 function renderChatSettingsContent() {
   if (state.chatSettingsTab === "hours") return renderWorkHoursSettings();
-
   if (state.chatSettingsTab === "quick") return renderQuickMessageSettings();
-
-  if (state.chatSettingsTab === "forward") return `<section class="chat-config-card">
-    <div class="chat-config-title"><div><b>消息转发</b><p>将人工客服及 AI 助手消息转发到外部渠道</p></div><span class="switch" data-switch></span></div>
-    <div class="settings-form-grid"><label>转发渠道<select class="select"><option>企业微信群机器人</option><option>邮件</option><option>Webhook</option></select></label><label>消息范围<select class="select"><option>全部消息</option><option>仅人工消息</option><option>仅 AI 消息</option></select></label></div>
-    <label class="settings-full-field">Webhook 地址<input class="input" placeholder="https://example.com/webhook"></label>
-    <button class="button primary" data-demo-action="消息转发设置已保存">保存设置</button>
+  if (state.chatSettingsTab === "forward") return `<section class="chat-config-card" data-forward-settings>
+    <div class="chat-config-title"><div><b>消息转发</b><p>将人工客服及 AI 助手消息转发到外部渠道</p></div><span class="switch ${forwardSettings.enabled ? "on" : ""}" data-forward-enabled></span></div>
+    <div class="settings-form-grid"><label>转发渠道<select class="select" data-forward-channel>${renderSelectOptions(["企业微信群机器人", "邮件", "Webhook"], forwardSettings.channel)}</select></label><label>消息范围<select class="select" data-forward-scope>${renderSelectOptions(["全部消息", "仅人工消息", "仅 AI 消息"], forwardSettings.scope)}</select></label></div>
+    <label class="settings-full-field">Webhook 地址<input class="input" data-forward-webhook value="${escapeHtml(forwardSettings.webhook)}" placeholder="https://example.com/webhook"></label>
+    <button class="button primary" data-forward-save>保存设置</button>
   </section>`;
 
   return `<div class="chat-automation-list">
-    ${renderAutomationCard("AI 自动跟进", "在用户长时间未回复时，由 AI 自动发送跟进消息", true, `
-      <label>用户未回复时间（分钟）<input class="input" type="number" value="10"></label>
-      <label>选择指定对话分组<select class="select"><option>全部对话</option><option>人工对话</option><option>AI对话</option></select></label>
-      <label class="settings-full-field">回复内容<textarea class="textarea" placeholder="请输入自动跟进内容"></textarea></label>`)}
-    ${renderAutomationCard("结束时 AI 自动回复", "当人工结束对话后，由 AI 补充回复或进行满意度询问", false, `
-      <label>工作时间延时（分钟）<input class="input" type="number" value="10"></label>
-      <label>非工作时间延时（分钟）<input class="input" type="number" value="0"></label>
-      <label>超时会话标识<select class="select"><option>显示“超时”标识</option><option>不显示</option></select></label>`)}
-    ${renderAutomationCard("AI 多媒体内容发送", "允许 AI 回复图片、视频、文件和音频素材", true, `
-      <label><input type="checkbox" checked> 图片格式</label><label><input type="checkbox" checked> 视频格式</label><label><input type="checkbox" checked> 文件格式</label><label><input type="checkbox" checked> 音频格式</label>`)}
-    ${renderAutomationCard("AI 长回复内容拆分", "将较长回复拆分为多条消息，提升阅读体验", false, `
-      <label>最大回复内容字数<input class="input" type="number" value="300"></label><label>最大拆分回复条数<input class="input" type="number" value="3"></label>`)}
-    ${renderAutomationCard("自定义 AI 内容提取/总结", "配置对话总结提示词及触发条件", false, `
-      <label>对话分组选择<select class="select"><option>请选择</option>${customConversationViews.map((x) => `<option>${escapeHtml(x)}</option>`).join("")}</select></label>
-      <label>至少包含对话条数<input class="input" type="number" value="4"></label>
-      <label class="settings-full-field">总结提示词<textarea class="textarea" placeholder="请输入 AI 总结对话时的提示词"></textarea></label>`)}
+    ${renderAutomationCard("followUp", "AI 自动跟进", "在用户长时间未回复时，由 AI 自动发送跟进消息", automationSettings.followUp.enabled, `
+      <label>用户未回复时间（分钟）<input class="input" type="number" min="1" data-auto-field="followUp.minutes" value="${automationSettings.followUp.minutes}"></label>
+      <label>选择指定对话分组<select class="select" data-auto-field="followUp.group">${renderSelectOptions(["全部对话", "人工对话", "AI对话", ...customConversationViews], automationSettings.followUp.group)}</select></label>
+      <label class="settings-full-field">回复内容<textarea class="textarea" data-auto-field="followUp.content" placeholder="请输入自动跟进内容">${escapeHtml(automationSettings.followUp.content)}</textarea></label>`)}
+    ${renderAutomationCard("closingReply", "结束时 AI 自动回复", "当人工结束对话后，由 AI 补充回复或进行满意度询问", automationSettings.closingReply.enabled, `
+      <label>工作时间延时（分钟）<input class="input" type="number" min="0" data-auto-field="closingReply.workDelay" value="${automationSettings.closingReply.workDelay}"></label>
+      <label>非工作时间延时（分钟）<input class="input" type="number" min="0" data-auto-field="closingReply.offHoursDelay" value="${automationSettings.closingReply.offHoursDelay}"></label>
+      <label>超时会话标识<select class="select" data-auto-field="closingReply.timeoutFlag">${renderSelectOptions(["显示“超时”标识", "不显示"], automationSettings.closingReply.timeoutFlag)}</select></label>`)}
+    ${renderAutomationCard("media", "AI 多媒体内容发送", "允许 AI 回复图片、视频、文件和音频素材", automationSettings.media.enabled, `
+      <label><input type="checkbox" data-auto-check="media.image" ${automationSettings.media.image ? "checked" : ""}> 图片格式</label><label><input type="checkbox" data-auto-check="media.video" ${automationSettings.media.video ? "checked" : ""}> 视频格式</label><label><input type="checkbox" data-auto-check="media.file" ${automationSettings.media.file ? "checked" : ""}> 文件格式</label><label><input type="checkbox" data-auto-check="media.audio" ${automationSettings.media.audio ? "checked" : ""}> 音频格式</label>`)}
+    ${renderAutomationCard("split", "AI 长回复内容拆分", "将较长回复拆分为多条消息，提升阅读体验", automationSettings.split.enabled, `
+      <label>最大回复内容字数<input class="input" type="number" min="50" data-auto-field="split.maxChars" value="${automationSettings.split.maxChars}"></label><label>最大拆分回复条数<input class="input" type="number" min="1" data-auto-field="split.maxMessages" value="${automationSettings.split.maxMessages}"></label>`)}
+    ${renderAutomationCard("summary", "自定义 AI 内容提取/总结", "配置对话总结提示词及触发条件", automationSettings.summary.enabled, `
+      <label>对话分组选择<select class="select" data-auto-field="summary.group">${renderSelectOptions(["请选择", ...customConversationViews], automationSettings.summary.group)}</select></label>
+      <label>至少包含对话条数<input class="input" type="number" min="1" data-auto-field="summary.minMessages" value="${automationSettings.summary.minMessages}"></label>
+      <label class="settings-full-field">总结提示词<textarea class="textarea" data-auto-field="summary.prompt" placeholder="请输入 AI 总结对话时的提示词">${escapeHtml(automationSettings.summary.prompt)}</textarea></label>`)}
     <div class="chat-settings-tip"><b>小技巧</b><span>可通过 AI 流程或连接器，将对话总结内容同步到表格、数据库或消息渠道中。</span></div>
   </div>`;
 }
 
 function renderWorkHoursSettings() {
-  const disabled = state.workHoursEnabled ? "" : "disabled";
-  const rangeRows = Array.from({ length: state.workTimeRangeCount }, (_, index) => `<div class="work-hours-time-row">
-    <label class="work-hours-time"><span>◷</span><input type="time" aria-label="开始时间" ${disabled}></label>
-    <span class="work-hours-to">至</span>
-    <label class="work-hours-time"><span>◷</span><input type="time" aria-label="结束时间" ${disabled}></label>
-    ${index === 0 ? `<button class="work-hours-circle-add" type="button" data-add-work-time title="新增时间段" ${disabled}>＋</button>` : `<button class="work-hours-circle-remove" type="button" data-remove-work-time title="删除时间段">−</button>`}
-  </div>`).join("");
-  const schedules = Array.from({ length: state.workScheduleCount }, (_, index) => `<div class="work-hours-schedule">
+  const disabled = workHoursSettings.enabled ? "" : "disabled";
+  const schedules = workHoursSettings.schedules.map((schedule, scheduleIndex) => `<div class="work-hours-schedule" data-work-schedule-row>
     <label class="work-hours-field-title">工作时间<span>*</span></label>
-    <select class="work-hours-select" aria-label="选择工作日" ${disabled}>
-      <option value="">请选择工作日</option>
-      <option>周一至周五</option><option>每天</option><option>自定义</option>
+    <select class="work-hours-select" aria-label="选择工作日" data-work-day ${disabled}>
+      ${["周一至周五", "每天", "自定义"].map((item) => `<option ${schedule.day === item ? "selected" : ""}>${item}</option>`).join("")}
     </select>
-    <div class="work-hours-ranges">${rangeRows}</div>
-    ${index > 0 ? `<button class="work-hours-delete-schedule" type="button" data-remove-work-schedule>删除此工作时间</button>` : ""}
+    <div class="work-hours-ranges">
+      ${schedule.ranges.map((range, rangeIndex) => `<div class="work-hours-time-row" data-work-range-row>
+        <label class="work-hours-time"><span>◷</span><input type="time" aria-label="开始时间" data-work-start value="${escapeHtml(range.start)}" ${disabled}></label>
+        <span class="work-hours-to">至</span>
+        <label class="work-hours-time"><span>◷</span><input type="time" aria-label="结束时间" data-work-end value="${escapeHtml(range.end)}" ${disabled}></label>
+        ${rangeIndex === 0 ? `<button class="work-hours-circle-add" type="button" data-add-work-time="${scheduleIndex}" title="新增时间段" ${disabled}>＋</button>` : `<button class="work-hours-circle-remove" type="button" data-remove-work-time="${scheduleIndex}:${rangeIndex}" title="删除时间段">−</button>`}
+      </div>`).join("")}
+    </div>
+    ${scheduleIndex > 0 ? `<button class="work-hours-delete-schedule" type="button" data-remove-work-schedule="${scheduleIndex}">删除此工作时间</button>` : ""}
   </div>`).join("");
 
   return `<section class="work-hours-page">
     <header class="work-hours-heading">
       <h2>工作时间设置</h2>
-      <p>开启后，可设置人工服务工作时间，当访客在非工作时间咨询时，按照设置的处理方式对访客进行回复 <button class="link-button" type="button">了解更多</button></p>
+      <p>开启后，可设置人工服务工作时间，当访客在非工作时间咨询时，按照设置的处理方式对访客进行回复 <button class="link-button" type="button" data-demo-action="工作时间说明">了解更多</button></p>
     </header>
 
     <div class="work-hours-toggle-row">
       <span>是否开启工作时间</span>
-      <button class="work-hours-switch ${state.workHoursEnabled ? "on" : ""}" type="button" role="switch" aria-checked="${state.workHoursEnabled}" data-work-hours-switch><i></i></button>
+      <button class="work-hours-switch ${workHoursSettings.enabled ? "on" : ""}" type="button" role="switch" aria-checked="${workHoursSettings.enabled}" data-work-hours-switch><i></i></button>
     </div>
 
     <div class="work-hours-schedules">${schedules}</div>
@@ -164,22 +181,20 @@ function renderWorkHoursSettings() {
     <section class="after-hours-section">
       <h3>非工作时间处理方式</h3>
       <p>如果不在上述工作时间如何处理</p>
-      <select class="work-hours-select after-hours-select" aria-label="非工作时间处理方式">
-        <option>A: 回复文本内容</option>
-        <option>B: 转接 AI 助手</option>
-        <option>C: 留言并等待人工回复</option>
+      <select class="work-hours-select after-hours-select" aria-label="非工作时间处理方式" data-after-hours-action>
+        ${["A: 回复文本内容", "B: 转接 AI 助手", "C: 留言并等待人工回复"].map((item) => `<option ${workHoursSettings.afterHoursAction === item ? "selected" : ""}>${item}</option>`).join("")}
       </select>
       <div class="after-hours-editor">
         <div class="after-hours-toolbar" aria-label="文本格式工具栏">
-          <button>H</button><button><b>B</b></button><button><i>I</i></button><button>S̶</button><span></span><button>☷</button><button>1₂</button><span></span><button>≡</button><button>☰</button><span></span><button>↗</button><button>▣</button><button>▦⌄</button><button>▧⌄</button><span></span><button class="muted">↶</button><button class="muted">↷</button>
+          <button type="button" data-after-hours-format="formatBlock" data-format-value="h3">H</button><button type="button" data-after-hours-format="bold"><b>B</b></button><button type="button" data-after-hours-format="italic"><i>I</i></button><button type="button" data-after-hours-format="strikeThrough">S</button><span></span><button type="button" data-after-hours-format="insertUnorderedList">列表</button><button type="button" data-after-hours-format="insertOrderedList">编号</button><span></span><button type="button" data-after-hours-format="outdent">外移</button><button type="button" data-after-hours-format="indent">缩进</button><span></span><button type="button" data-after-hours-insert="link">链接</button><button type="button" data-after-hours-insert="image">图片</button><button type="button" data-after-hours-insert="table">表格</button><button type="button" data-after-hours-insert="variable">变量</button><span></span><button type="button" class="muted" data-after-hours-format="undo">撤销</button><button type="button" class="muted" data-after-hours-format="redo">重做</button>
         </div>
-        <div class="after-hours-content" contenteditable="true">抱歉，现在为非工作时间，请您在我们的工作时间再次联系，谢谢</div>
+        <div class="after-hours-content" contenteditable="true" data-after-hours-text>${escapeHtml(workHoursSettings.afterHoursText)}</div>
       </div>
     </section>
 
     <footer class="work-hours-footer">
       <button class="button" type="button" data-chat-settings-back>返回</button>
-      <button class="button primary" type="button" data-demo-action="工作时间设置已保存">确认</button>
+      <button class="button primary" type="button" data-work-hours-save>确认</button>
     </footer>
   </section>`;
 }
@@ -197,7 +212,7 @@ function renderQuickMessageSettings() {
     <div class="quick-message-toolbar">
       <button class="button primary" data-modal="quickReply">＋ 新增快捷回复</button>
       <button class="button" data-modal="quickGroup">＋ 新增分组</button>
-      <label class="quick-message-search"><span>⌕</span><input data-quick-message-search value="${escapeHtml(state.quickMessageSearch)}" placeholder="搜索"></label>
+      <label class="quick-message-search"><span class="search-glyph"></span><input data-quick-message-search value="${escapeHtml(state.quickMessageSearch)}" placeholder="搜索"></label>
     </div>
     ${!hasData ? `<div class="quick-message-empty"><div class="quick-empty-art">▤</div><span>暂无分组</span></div>` : `
       <div class="quick-group-list">
@@ -220,12 +235,13 @@ function renderQuickReplyRow(reply) {
   return `<div class="quick-message-row"><b>${escapeHtml(reply.title)}</b><span>${escapeHtml(reply.content)}</span><button class="icon-button" data-quick-reply-delete="${reply.id}" title="删除">×</button></div>`;
 }
 
-function renderAutomationCard(title, description, enabled, fields) {
-  return `<section class="chat-config-card">
-    <div class="chat-config-title"><div><b>${title}</b><p>${description}　<a>了解更多</a></p></div><span class="switch ${enabled ? "on" : ""}" data-switch></span></div>
+function renderAutomationCard(id, title, description, enabled, fields) {
+  const settings = automationSettings[id];
+  return `<section class="chat-config-card" data-automation-card="${id}">
+    <div class="chat-config-title"><div><b>${title}</b><p>${description}　<a data-demo-action="${title}说明">了解更多</a></p></div><span class="switch ${enabled ? "on" : ""}" data-automation-enabled="${id}"></span></div>
     <div class="settings-form-grid">${fields}</div>
-    <div class="automation-controls"><label>停止回复条件 <span class="switch" data-switch></span></label><label>对话记录条数 <input type="range" min="1" max="10" value="2"> 2 条</label></div>
-    <button class="button primary" data-demo-action="${title}设置已保存">保存设置</button>
+    <div class="automation-controls"><label>停止回复条件 <span class="switch ${settings.stopOnReply ? "on" : ""}" data-automation-stop="${id}"></span></label><label>对话记录条数 <input type="range" min="1" max="10" value="${settings.historyCount}" data-auto-field="${id}.historyCount"> <span>${settings.historyCount} 条</span></label></div>
+    <button class="button primary" data-automation-save="${id}">保存设置</button>
   </section>`;
 }
 
@@ -243,49 +259,33 @@ function renderConversationSearch() {
   </div>`;
 }
 
-function matchesConversationSearch(item) {
-  const query = state.chatSearchQuery.trim().toLowerCase();
-  if (!query) return true;
-  const [, name, owner, , last, , , phone = ""] = item;
-  if (state.chatSearchMode === "phone") {
-    const digits = query.replace(/\D/g, "");
-    return Boolean(digits) && String(phone).includes(digits);
-  }
-  const fields = [name, owner, last].map((value) => String(value).toLowerCase());
-  return state.chatSearchMode === "exact" ? fields.some((value) => value === query) : fields.some((value) => value.includes(query));
+function renderConversationRefineBar() {
+  return `<div class="conv-refine-bar">
+    <select data-chat-status-filter aria-label="筛选会话状态">${getConversationStatuses().map((item) => `<option ${item === (state.chatStatusFilter || "全部状态") ? "selected" : ""}>${escapeHtml(item)}</option>`).join("")}</select>
+    <select data-chat-channel-filter aria-label="筛选来源渠道">${getConversationChannels().map((item) => `<option ${item === (state.chatChannelFilter || "全部渠道") ? "selected" : ""}>${escapeHtml(item)}</option>`).join("")}</select>
+  </div>`;
 }
 
-function getConversationAgeMinutes(time) {
-  const hours = Number(time.match(/(\d+)小时/)?.[1] || 0);
-  const minutes = Number(time.match(/(\d+)分钟/)?.[1] || 0);
-  return hours * 60 + minutes;
-}
-
-function sortConversations(conversations) {
-  return [...conversations].sort((a, b) => {
-    if (state.chatSort === "unread" && Boolean(a[6]) !== Boolean(b[6])) return a[6] ? -1 : 1;
-    return getConversationAgeMinutes(a[3]) - getConversationAgeMinutes(b[3]);
-  });
-}
-
-function renderConversationItem([id, name, owner, time, last, status, unread]) {
-  const active = state.selectedConversation === id ? "active" : "";
-  return `<div class="conv-item ${active}" data-conversation="${id}">
-    ${iconBox(id === "group" ? "群" : id === "demo" ? "演" : "K", "channel-icon")}
+function renderConversationItem(conversation) {
+  const active = state.selectedConversation === conversation.id ? "active" : "";
+  const preview = getConversationPreview(conversation);
+  return `<div class="conv-item ${active}" data-conversation="${conversation.id}">
+    ${iconBox(conversation.avatar, "channel-icon")}
     <div style="min-width:0; flex:1">
       <div style="display:flex; justify-content:space-between; gap:8px">
-        <b style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${name}</b>
-        <span class="subtle" style="white-space:nowrap">${unread ? `<i class="unread-dot"></i>` : ""}${time}</span>
+        <b style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${escapeHtml(conversation.name)}</b>
+        <span class="subtle" style="white-space:nowrap">${conversation.unread ? `<i class="unread-dot"></i>` : ""}${getConversationTimeLabel(conversation)}</span>
       </div>
-      <div class="subtle" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis"> ${owner} ${last}</div>
+      <div class="subtle" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis"> ${escapeHtml(conversation.owner)} ${escapeHtml(preview)}</div>
+      <div class="conv-item-tags"><span>${escapeHtml(conversation.channel)}</span><span>${conversation.type === "manual" ? "人工" : "AI"}</span></div>
     </div>
-    <span class="conv-status ${status}"></span>
+    <span class="conv-status ${conversation.statusColor}"></span>
   </div>`;
 }
 
 function renderChannelPromo() {
   return `<div class="join-card">
-    <button class="join-close">×</button>
+    <button class="join-close" data-hide-channel-promo>×</button>
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px">
       <span class="mini-platform green">微</span>
       <span class="mini-platform red">小</span>
@@ -298,26 +298,90 @@ function renderChannelPromo() {
   </div>`;
 }
 
+function renderConversationLoading() {
+  return `<div class="conv-loading"><span></span><b>正在加载会话</b></div>`;
+}
+
 function renderConversationDetail() {
   const conv = getSelectedConversation();
-  const title = conv?.[1] || "欧诚国际物流&集简云对接群";
-  const owner = conv?.[2] || "Kelvin";
+  if (!conv) return renderConversationGuide();
+  const aiReplyActive = shouldShowAiReplyBanner(conv);
   return `
-        <div class="conv-head"><b>${title} › ${owner}</b><button class="button primary small">解决中</button></div>
+        <div class="conv-head">
+          <div><b>${escapeHtml(conv.name)} › ${escapeHtml(conv.assignee)}</b><span class="conv-head-sub">${escapeHtml(conv.channel)} · ${conv.hosted ? "托管中" : "未托管"}</span></div>
+          <button class="button primary small" data-conversation-status-button title="${conv.status === "已解决" ? "重新打开会话" : "标记为已解决"}">${escapeHtml(conv.status)}</button>
+        </div>
         <div class="conv-messages">
-          ${state.convMessages.map((m) => renderConvBubble(m)).join("")}
+          ${getConversationMessages(conv).length ? getConversationMessages(conv).map((m) => renderConvBubble(m)).join("") : `<div class="empty" style="min-height:220px">暂无消息记录</div>`}
         </div>
-        <div class="conv-compose">
-          <div style="display:flex; gap:16px; color:var(--blue); margin-bottom:8px"><b>回复</b><span>备注</span><span>📎发送素材</span></div>
-          <textarea id="convInput" placeholder="请输入对话内容" style="width:100%; height:56px; border:0; outline:0; resize:none"></textarea>
-          <div style="display:flex; justify-content:space-between"><span class="subtle">□</span><button class="button primary small" id="convSend">➤</button></div>
+        ${aiReplyActive ? renderAiReplyBar(conv) : ""}
+        <div class="conv-quick-strip">
+          ${quickMessageData.replies.slice(0, 4).map((reply) => `<button type="button" data-quick-insert="${reply.id}">${escapeHtml(reply.title)}</button>`).join("")}
+          <button type="button" data-modal="quickReply">＋ 新增</button>
         </div>
+        ${renderConversationCompose(conv)}
   `;
 }
 
-function getSelectedConversation() {
-  const all = Object.values(conversationMap).flat();
-  return all.find((item) => item[0] === state.selectedConversation);
+function renderAiReplyBar(conv) {
+  const last = getConversationLastMessage(conv);
+  const preview = String(last?.text || "新消息").slice(0, 28);
+  return `<div class="ai-reply-bar">
+    <span class="ai-reply-dot"></span>
+    <div><b>AI 正在替你回复</b><span>将根据客户最后一句“${escapeHtml(preview)}”自动继续接待</span></div>
+    <button type="button" data-cancel-ai-reply="${conv.id}" title="取消 AI 代答">×</button>
+  </div>`;
+}
+
+function renderConversationCompose(conv) {
+  const mode = state.conversationComposeMode || "reply";
+  return `<div class="conv-compose" data-compose-active-mode="${mode}">
+    <div class="conv-compose-tabs" role="tablist" aria-label="对话输入类型">
+      <button class="${mode === "reply" ? "active" : ""}" type="button" data-compose-mode="reply">回复</button>
+      <button class="${mode === "note" ? "active" : ""}" type="button" data-compose-mode="note">备注</button>
+      <button class="${mode === "material" ? "active" : ""}" type="button" data-compose-mode="material">📎发送素材</button>
+    </div>
+    ${mode === "note" ? renderConversationNoteComposer(conv) : mode === "material" ? renderConversationMaterialComposer(conv) : renderConversationReplyComposer(conv)}
+  </div>`;
+}
+
+function renderConversationReplyComposer(conv) {
+  const hint = conv.hosted ? `Enter 发送到 ${conv.channel} 映射队列` : "Enter 发送模拟人工消息";
+  return `<div class="conv-compose-body">
+    <textarea id="convInput" placeholder="请输入对话内容" aria-label="回复内容"></textarea>
+    <div class="conv-compose-foot"><label><input type="checkbox" data-enter-to-send checked> ${escapeHtml(hint)}</label><button class="button primary small" id="convSend">➤</button></div>
+  </div>`;
+}
+
+function renderConversationNoteComposer(conv) {
+  const notes = Array.isArray(conv.notes) ? conv.notes.slice(-3).reverse() : [];
+  return `<div class="conv-compose-body note-mode">
+    ${notes.length ? `<div class="conversation-note-list">${notes.map((note) => `<div><b>${escapeHtml(note.author || currentAgentName)}</b><span>${escapeHtml(note.createdAt || "刚刚")}</span><p>${escapeHtml(note.text)}</p></div>`).join("")}</div>` : `<div class="conversation-note-empty">暂无内部备注</div>`}
+    <textarea id="convNoteInput" placeholder="添加内部备注，仅团队可见，不会发送给客户" aria-label="内部备注"></textarea>
+    <div class="conv-compose-foot"><span class="subtle">备注会保存到当前会话，不会同步到外部客户</span><button class="button primary small" id="convNoteSave">保存</button></div>
+  </div>`;
+}
+
+function renderConversationMaterialComposer(conv) {
+  const samples = [
+    ["price-sheet", "报价表", "file", "欧洲海运报价表.pdf", "https://example.com/materials/eu-sea-price.pdf"],
+    ["route-image", "线路图", "image", "欧洲海运线路图.png", "https://example.com/materials/eu-sea-route.png"],
+    ["booking-link", "预约链接", "link", "客户报价信息收集表", "https://example.com/forms/quote"],
+  ];
+  return `<div class="conv-compose-body material-mode">
+    <div class="material-compose-grid">
+      <select id="convMaterialType" aria-label="素材类型">
+        ${["file", "image", "link"].map((type) => `<option value="${type}">${{ file: "文件", image: "图片", link: "链接" }[type]}</option>`).join("")}
+      </select>
+      <input id="convMaterialTitle" placeholder="素材名称" value="${conv.channel.includes("企业微信") ? "企业微信资料卡片" : ""}" aria-label="素材名称">
+      <input id="convMaterialUrl" placeholder="素材链接或文件地址" aria-label="素材链接">
+    </div>
+    <div class="material-samples">
+      ${samples.map(([id, label, type, title, url]) => `<button type="button" data-material-sample="${id}" data-material-type="${type}" data-material-title="${escapeHtml(title)}" data-material-url="${escapeHtml(url)}">${escapeHtml(label)}</button>`).join("")}
+    </div>
+    <textarea id="convMaterialCaption" placeholder="可选：附加说明，会随素材一起发送"></textarea>
+    <div class="conv-compose-foot"><span class="subtle">${escapeHtml(conv.channel)} · 将作为素材消息写入当前会话</span><button class="button primary small" id="convMaterialSend">发送</button></div>
+  </div>`;
 }
 
 function renderConversationGuide() {
@@ -334,11 +398,11 @@ function renderConversationGuide() {
     ["联系人字段设置", "对联系人字段属性进行自定义配置", "T", "#7a5cff"],
   ];
   const titleHint = {
-    全部对话: "您还没有任何人工服务对话消息，了解如何设置人工服务",
-    人工对话: "您还没有任何人工服务对话消息，了解如何设置人工服务",
-    AI对话: "您还没有选择 AI 对话，选择左侧会话可查看 AI 自动回复记录",
-    指给我的: "您还没有待处理的指派对话，了解如何设置人工服务",
-  }[state.chatFilter] || "选择左侧会话查看消息，或先了解聚合对话配置";
+    全部对话: "选择左侧会话查看消息、客户信息和托管状态",
+    人工对话: "选择左侧人工会话，继续处理客户消息",
+    AI对话: "选择左侧 AI 对话，查看自动回复记录或转人工",
+    指给我的: "选择左侧指派给你的会话进行跟进",
+  }[state.chatFilter] || "该自定义视图下暂无选中的会话";
   return `<div class="chat-guide">
     <div class="guide-logo"><span class="brand-mark"></span><b>Jelly AI</b></div>
     <div class="subtle">${titleHint} <span style="color:var(--blue)">了解更多</span></div>
@@ -362,23 +426,62 @@ function getGuideCardAction(title) {
   if (title === "工作时间设置") return `data-chat-settings-open="hours"`;
   if (title === "快捷消息") return `data-chat-settings-open="quick"`;
   if (title === "消息转发") return `data-chat-settings-open="forward"`;
+  if (title === "转人工对话设置") return `data-chat-settings-open="automation"`;
   if (title === "数据统计") return `data-page="analytics"`;
   if (title === "联系人列表") return `data-page="contacts"`;
+  if (title === "联系人字段设置") return `data-page="contacts"`;
   return `data-demo-action="${title}"`;
 }
 
 function renderConversationInfo() {
+  const conv = getSelectedConversation();
+  if (!conv) return "";
+  const possibleTags = Array.from(new Set(["高意向", "待报价", "海运询价", "演示预约", "售后问题", ...conv.tags]));
   return `<div class="conv-info">
     <h3>联系人</h3>
-    <div class="mini-card"><b>欧诚国际物流&集简云对接群</b><br><span class="subtle">添加群备注</span><br><br><button class="button primary" style="width:100%">查看/添加群成员</button></div>
-    <div class="mini-card"><div class="mini-card-head">当前跟进人</div><span class="avatar">K</span> Kelvin <button class="button ghost small">重新分配</button></div>
-    <div class="mini-card"><div class="mini-card-head">群操作</div><div class="label">禁止修改群名称 <span class="switch" data-switch></span></div><div class="label">禁止群成员互加好友 <span class="switch" data-switch></span></div></div>
-    <div class="mini-card"><div class="mini-card-head">对话来源信息</div><table><tr><td>来源名称</td><td>企业微信代运营</td></tr><tr><td>会话ID</td><td>2aea37ed...</td></tr><tr><td>托管账户ID</td><td>1688855417782936</td></tr><tr><td>群ID</td><td>R:10775840332412006</td></tr></table></div>
+    <div class="mini-card"><b>${escapeHtml(conv.customer.name)}</b><br><span class="subtle">${escapeHtml(conv.customer.remark)}</span><br><br><button class="button primary" style="width:100%" data-modal="conversationMembers">查看/添加群成员</button></div>
+    <div class="mini-card"><div class="mini-card-head">当前跟进人</div><span class="avatar">${escapeHtml(conv.assignee.slice(0, 1))}</span> ${escapeHtml(conv.assignee)} <button class="button ghost small" data-transfer-human>转人工</button></div>
+    <div class="mini-card">
+      <div class="mini-card-head">会话状态</div>
+      <select class="conv-info-select" data-conversation-status>
+        ${["待跟进", "解决中", "AI接待", "已解决"].map((item) => `<option ${conv.status === item ? "selected" : ""}>${item}</option>`).join("")}
+      </select>
+    </div>
+    <div class="mini-card">
+      <div class="mini-card-head">客户标签</div>
+      <div class="conv-tag-list">
+        ${possibleTags.map((tag) => `<button class="${conv.tags.includes(tag) ? "active" : ""}" type="button" data-customer-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`).join("")}
+      </div>
+      <div class="conv-tag-add"><input data-new-customer-tag placeholder="新增标签"><button class="button small" data-add-customer-tag>添加</button></div>
+    </div>
+    <div class="mini-card"><div class="mini-card-head">群操作</div><div class="label">托管状态 <span class="switch ${conv.hosted ? "on" : ""}" data-hosted-toggle></span></div><div class="label">收藏会话 <span class="switch ${conv.starred ? "on" : ""}" data-star-conversation></span></div></div>
+    <div class="mini-card"><div class="mini-card-head">对话来源信息</div><table><tr><td>来源名称</td><td>${escapeHtml(conv.sourceName)}</td></tr><tr><td>会话ID</td><td>${escapeHtml(conv.sourceId)}</td></tr><tr><td>托管账户ID</td><td>${escapeHtml(conv.hostedAccountId)}</td></tr><tr><td>外部ID</td><td>${escapeHtml(conv.externalId)}</td></tr><tr><td>手机号</td><td>${escapeHtml(conv.customer.phone)}</td></tr></table></div>
   </div>`;
 }
 
 function renderConvBubble(m) {
-  if (m.role === "system") return `<div style="text-align:center; color:#8a96a8; margin:16px">${m.text}</div>`;
+  if (m.role === "system") return `<div class="message-system"><span>${escapeHtml(m.text)}</span></div>`;
   const align = m.role === "me" || m.role === "ai" ? "user" : "";
-  return `<div class="message ${align}">${iconBox(m.role === "other" ? "客" : m.role === "me" ? "K" : "AI")}<div class="bubble">${m.text}${m.meta ? `<div class="bubble-meta">${m.meta}</div>` : ""}</div></div>`;
+  const roleLabel = { me: "人工", ai: "AI", customer: "客户", other: "客户" }[m.role] || "客户";
+  const icon = m.role === "customer" || m.role === "other" ? "客" : m.role === "me" ? "K" : "AI";
+  const body = m.type && m.type !== "text" ? renderMaterialMessageBody(m) : escapeHtml(m.text);
+  return `<div class="message ${align}">
+    ${iconBox(icon)}
+    <div>
+      <div class="message-role ${m.role}">${roleLabel}${m.createdAt ? `<span>${escapeHtml(m.createdAt)}</span>` : ""}</div>
+      <div class="bubble">${body}${m.meta ? `<div class="bubble-meta">${escapeHtml(m.meta)}</div>` : ""}</div>
+    </div>
+  </div>`;
+}
+
+function renderMaterialMessageBody(message) {
+  const material = message.material || {};
+  const title = material.title || message.text || "素材消息";
+  const typeLabel = { image: "图片", file: "文件", link: "链接", video: "视频" }[message.type] || "素材";
+  const url = material.url || "";
+  return `<div class="material-message">
+    <b>${escapeHtml(typeLabel)} · ${escapeHtml(title)}</b>
+    ${url ? `<span>${escapeHtml(url)}</span>` : ""}
+    ${message.text && message.text !== title ? `<p>${escapeHtml(message.text)}</p>` : ""}
+  </div>`;
 }

@@ -1,6 +1,7 @@
 // Enterprise WeCom hosting module renderers.
 
 function renderWechat() {
+  ensureWecomState();
   const tabs = [
     ["accounts", "账号列表"],
     ["rules", "聚合规则"],
@@ -57,15 +58,17 @@ function renderWechatTab() {
 }
 
 function renderChannelAccounts() {
-  const accounts = getWechatFilteredAccounts();
+  const pager = getWechatAccountPageResult();
+  const accounts = pager.items;
   const groups = ["全部小组", ...new Set(state.wecomAccounts.map((account) => account.group))];
   const assistants = ["全部助手", ...new Set(state.wecomAccounts.map((account) => account.assistant))];
   const statusOptions = ["全部状态", "待扫码", "初始化中", "在线", "离线", "异常", "暂停"];
+  const accountStats = window.wecomService?.accountStats() || {};
   const stats = [
-    ["在线账号", state.wecomAccounts.filter((account) => account.status === "在线").length, "green"],
-    ["离线账号", state.wecomAccounts.filter((account) => account.status === "离线").length, "orange"],
-    ["初始化中", state.wecomAccounts.filter((account) => account.status === "初始化中").length, "blue"],
-    ["异常账号", state.wecomAccounts.filter((account) => account.status === "异常").length, "red"],
+    ["在线账号", accountStats.online ?? state.wecomAccounts.filter((account) => account.status === "在线").length, "green"],
+    ["离线账号", accountStats.offline ?? state.wecomAccounts.filter((account) => account.status === "离线").length, "orange"],
+    ["初始化中", accountStats.starting ?? state.wecomAccounts.filter((account) => account.status === "初始化中").length, "blue"],
+    ["异常账号", accountStats.error ?? state.wecomAccounts.filter((account) => account.status === "异常").length, "red"],
   ];
   return `
     <div class="channel-section-head">
@@ -76,9 +79,9 @@ function renderChannelAccounts() {
       <button class="button primary" data-modal="authAccount">＋ 添加账号</button>
     </div>
     <div class="channel-top-tabs">
-      <button class="active-blue" data-demo-action="已切换到托管账号">托管账号</button>
-      <button data-demo-action="小组详情为 Demo 展示">小组详情</button>
-      <button data-demo-action="自定义侧边栏为 Demo 展示">自定义侧边栏</button>
+      <button class="active-blue" data-wecom-account-top-action="accounts">托管账号</button>
+      <button data-wecom-account-top-action="group">小组详情</button>
+      <button data-wecom-account-top-action="sidebar">自定义侧边栏</button>
     </div>
     <div class="group-hero">
       <div class="group-hero-main">
@@ -94,27 +97,30 @@ function renderChannelAccounts() {
     </div>
     <div class="member-toolbar">
       <div>
-        <button class="button small active" data-demo-action="已切换到账号列表">账号列表</button>
-        <button class="button small primary" data-demo-action="成员列表为 Demo 展示">成员列表</button>
+        <button class="button small active" data-wecom-member-view="accounts">账号列表</button>
+        <button class="button small primary" data-wecom-member-view="members">成员列表</button>
       </div>
-      <input class="input" placeholder="请输入成员名称" />
+      <input class="input" data-wecom-member-search-inline placeholder="请输入成员名称" value="${escapeHtml(state.wecomMemberSearch)}" />
     </div>
     <div class="table-card">
       <table class="compact-table">
-        <thead><tr><th>成员名称(1)</th><th>托管账号</th><th>在线状态</th><th>角色</th><th>操作</th></tr></thead>
+        <thead><tr><th>成员名称(${state.wecomSelectedMemberIds.length})</th><th>托管账号</th><th>在线状态</th><th>角色</th><th>操作</th></tr></thead>
         <tbody>
-          <tr>
-            <td><span class="member-dot">我</span> 我</td>
-            <td>gs4758 / 6</td>
-            <td><span class="tag green">在线</span></td>
-            <td>小组管理员</td>
-            <td><button class="button small" data-modal="groupMembers">编辑成员</button></td>
-          </tr>
+          ${state.wecomTeamMembers
+            .filter((member) => state.wecomSelectedMemberIds.includes(member.id))
+            .map((member) => `<tr>
+              <td><span class="member-dot">${escapeHtml(member.name.slice(0, 1))}</span> ${escapeHtml(member.name)}</td>
+              <td>${escapeHtml(state.wecomAccounts[0]?.group || "gs4758")} / ${member.accountCount}</td>
+              <td>${renderWechatStatusTag(member.status)}</td>
+              <td>${escapeHtml(member.role)}</td>
+              <td><button class="button small" data-modal="groupMembers" title="编辑小组成员">编辑成员</button></td>
+            </tr>`)
+            .join("") || `<tr><td colspan="5"><div class="empty">暂无组内成员</div></td></tr>`}
         </tbody>
       </table>
     </div>
     <div class="status-grid wechat-status-grid">
-      ${stats.map(([label, value, cls]) => `<div class="metric"><div class="subtle">${label}</div><div class="metric-value">${value}</div><span class="tag ${cls}">本地模拟</span></div>`).join("")}
+      ${stats.map(([label, value, cls]) => `<div class="metric"><div class="subtle">${label}</div><div class="metric-value">${value}</div><span class="tag ${cls}">后端同步</span></div>`).join("")}
     </div>
     <div class="member-toolbar wechat-filter-bar">
       <input class="input" data-wechat-filter="wechatAccountFilter" placeholder="请输入账号名称 / ID" value="${escapeHtml(state.wechatAccountFilter)}" />
@@ -128,42 +134,47 @@ function renderChannelAccounts() {
         <thead><tr><th>账号信息</th><th>托管账号 ID</th><th>状态</th><th>所属小组</th><th>消息接收</th><th>AI 回复</th><th>绑定助手</th><th>最近心跳</th><th>操作</th></tr></thead>
         <tbody>
           ${accounts.length ? accounts.map((account) => `<tr>
-            <td><div class="wechat-account-cell">${iconBox(account.avatar, "channel-icon")}<div><b>${account.name}</b><br><span class="subtle">实例：${account.instanceId}</span></div></div></td>
-            <td>${account.accountId}<br><span class="subtle">内部 ID：${account.id}</span></td>
+            <td><div class="wechat-account-cell">${iconBox(account.avatar, "channel-icon")}<div><b>${escapeHtml(account.name)}</b><br><span class="subtle">别名：${escapeHtml(account.alias || "-")} · 实例：${escapeHtml(account.instanceId)}</span></div></div></td>
+            <td>${escapeHtml(account.accountId)}<br><span class="subtle">内部 ID：${escapeHtml(account.id)}</span></td>
             <td>${renderWechatStatusTag(account.status)}</td>
-            <td>${account.group}</td>
+            <td>${escapeHtml(account.group)}</td>
             <td>${renderWechatSwitch(account.messageEnabled, "account-message", account.id)}</td>
             <td>${renderWechatSwitch(account.aiEnabled, "account-ai", account.id)}</td>
-            <td>${account.assistant === "未绑定" ? `<span class="subtle">未绑定</span>` : `<span class="tag blue">${account.assistant}</span>`}</td>
-            <td>${account.heartbeat}</td>
+            <td>${account.assistant === "未绑定" ? `<span class="subtle">未绑定</span>` : `<span class="tag blue">${escapeHtml(account.assistant)}</span>`}</td>
+            <td>${escapeHtml(account.heartbeat)}</td>
             <td class="action-cell">
-              <button class="button small" data-wechat-tab="console">控制台</button>
-              <button class="button small" data-wechat-tab="advanced">高级设置</button>
-              <button class="button small" data-wecom-account-action="restart" data-wecom-id="${account.id}">重启</button>
-              <button class="button small" data-wecom-account-action="pause" data-wecom-id="${account.id}">${account.status === "暂停" ? "恢复" : "暂停"}</button>
-              <button class="button small" data-wecom-account-action="rescan" data-wecom-id="${account.id}">重新扫码</button>
-              <button class="button small" data-wecom-account-action="delete" data-wecom-id="${account.id}">删除</button>
+              <button class="button small" data-wecom-account-action="detail" data-wecom-id="${account.id}" title="查看账号详情">详情</button>
+              <button class="button small" data-wecom-account-action="edit" data-wecom-id="${account.id}" title="编辑账号配置">编辑</button>
+              <button class="button small" data-wechat-tab="console" title="进入机器人控制台">控制台</button>
+              <button class="button small" data-wechat-tab="advanced" title="进入高级设置">高级设置</button>
+              <button class="button small" data-wecom-account-action="restart" data-wecom-id="${account.id}" ${state.wecomLoading.accountActionId === account.id ? "disabled" : ""}>${renderWecomLoadingText(state.wecomLoading.accountActionId === account.id, "重启", "重启中")}</button>
+              <button class="button small" data-wecom-account-action="pause" data-wecom-id="${account.id}" title="${account.status === "暂停" ? "恢复托管" : "暂停托管"}">${account.status === "暂停" ? "恢复" : "暂停"}</button>
+              <button class="button small" data-wecom-account-action="rescan" data-wecom-id="${account.id}" title="重新进入扫码授权流程">重新扫码</button>
+              <button class="button small danger" data-wecom-account-action="delete" data-wecom-id="${account.id}" title="删除托管账号">删除</button>
             </td>
           </tr>`).join("") : `<tr><td colspan="9"><div class="empty">暂无匹配账号</div></td></tr>`}
         </tbody>
       </table>
+      ${renderWecomPagination(pager)}
     </div>`;
 }
 
 function renderChannelRules() {
-  const rows = state.wecomRules.map((rule) => {
+  const rules = window.wecomService?.listRules() || state.wecomRules;
+  const rows = rules.map((rule) => {
     const account = getWechatAccount(rule.accountId);
     return `<tr>
-      <td><b>${rule.name}</b><br><span class="subtle">规则 ID：${rule.id}</span></td>
-      <td>${account ? `${account.name}<br><span class="subtle">${account.accountId}</span>` : "未选择"}</td>
+      <td><b>${escapeHtml(rule.name)}</b><br><span class="subtle">规则 ID：${escapeHtml(rule.id)}</span></td>
+      <td>${account ? `${escapeHtml(account.name)}<br><span class="subtle">${escapeHtml(account.accountId)}</span>` : "未选择"}</td>
       <td>${renderWechatSwitch(rule.messageEnabled, "rule-message", rule.id)}</td>
       <td>${renderWechatSwitch(rule.aiEnabled, "rule-ai", rule.id)}</td>
-      <td>${rule.replyScope}</td>
-      <td>${rule.groupTrigger}</td>
-      <td><span class="tag blue">${rule.assistant}</span></td>
+      <td>${escapeHtml(rule.replyScope)}</td>
+      <td>${escapeHtml(rule.keywords || "-")}</td>
+      <td>${escapeHtml(rule.groupTrigger)}</td>
+      <td><span class="tag blue">${escapeHtml(rule.assistant)}</span></td>
       <td>${rule.maxReplies} 次</td>
       <td>${renderWechatStatusTag(rule.enabled ? "在线" : "暂停")}</td>
-      <td><button class="link-button" data-modal="ruleConfig">配置</button> <button class="link-button" data-wecom-rule-action="toggle" data-wecom-id="${rule.id}">${rule.enabled ? "停用" : "启用"}</button></td>
+      <td><button class="link-button" data-wecom-rule-action="edit" data-wecom-id="${rule.id}">配置</button> <button class="link-button" data-wecom-rule-action="toggle" data-wecom-id="${rule.id}">${rule.enabled ? "停用" : "启用"}</button> <button class="link-button" data-wecom-rule-action="delete" data-wecom-id="${rule.id}">删除</button></td>
     </tr>`;
   }).join("");
   return `
@@ -172,23 +183,29 @@ function renderChannelRules() {
         <h1 class="page-title">聚合规则</h1>
         <div class="subtle">接入到聚合对话并设置AI回复规则</div>
       </div>
-      <button class="button primary" data-modal="ruleConfig">＋ 添加规则</button>
+      <button class="button primary" data-wecom-rule-action="add">＋ 添加规则</button>
     </div>
     <div class="table-card">
       <table>
-        <thead><tr><th>规则名称</th><th>托管账号</th><th>消息接收</th><th>AI 回复</th><th>回复范围</th><th>群聊触发方式</th><th>绑定 AI 助手</th><th>最大 AI 回复次数</th><th>状态</th><th>操作</th></tr></thead>
-        <tbody>${rows}</tbody>
+        <thead><tr><th>规则名称</th><th>托管账号</th><th>消息接收</th><th>AI 回复</th><th>回复范围</th><th>关键词</th><th>群聊触发方式</th><th>绑定 AI 助手</th><th>最大 AI 回复次数</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="11"><div class="empty">暂无聚合规则</div></td></tr>`}</tbody>
       </table>
     </div>`;
 }
 
 function renderChannelAdvanced() {
-  const rows = [
+  const groupRows = [
     ["mentionExternal", "AI 群聊回复时是否 @ 外部联系人"],
     ["onlyExternalQuestions", "AI 群聊回复是否仅回复非企业员工问题"],
-    ["newFriendCreatesConversation", "新好友通过消息是否触发会话"],
     ["syncAllGroupMessages", "是否同步群聊全部内容"],
+  ];
+  const replyRows = [
+    ["groupAutoReply", "群聊是否允许 AI 自动回复"],
+    ["privateAutoReply", "私聊是否允许 AI 自动回复"],
     ["manualReplyToHuman", "终端设备手动回复后是否切换人工"],
+  ];
+  const triggerRows = [
+    ["newFriendCreatesConversation", "新好友通过消息是否触发会话"],
   ];
   return `
     <div class="channel-section-head">
@@ -196,12 +213,35 @@ function renderChannelAdvanced() {
         <h1 class="page-title">高级设置</h1>
         <div class="subtle">管理 企业微信代运营(私聊/群聊) 的高级功能选项。</div>
       </div>
+      <div class="button-row">
+        <button class="button" data-wecom-advanced-action="reset">恢复默认</button>
+        <button class="button primary" data-wecom-advanced-action="save">保存设置</button>
+      </div>
     </div>
     <div class="settings-list">
-      ${rows.map(([key, label]) => `<div class="setting-row"><b>${label}</b><span class="switch ${state.wecomAdvancedSettings[key] ? "on" : ""}" data-wecom-switch="advanced" data-wecom-id="${key}"></span></div>`).join("")}
+      <div class="wecom-setting-group"><b>群聊设置</b><span class="subtle">控制群消息同步、@ 外部联系人和员工问题过滤。</span></div>
+      ${groupRows.map(([key, label]) => `<div class="setting-row"><b>${label}</b>${renderWechatSwitch(state.wecomAdvancedSettings[key], "advanced", key)}</div>`).join("")}
+      <div class="wecom-setting-group"><b>回复设置</b><span class="subtle">控制私聊、群聊和人工接管策略。</span></div>
+      ${replyRows.map(([key, label]) => `<div class="setting-row"><b>${label}</b>${renderWechatSwitch(state.wecomAdvancedSettings[key], "advanced", key)}</div>`).join("")}
+      <div class="setting-row vertical">
+        <b>每日最大 AI 回复次数</b>
+        <input class="input" data-wecom-advanced-field="maxDailyReplies" value="${escapeHtml(state.wecomAdvancedSettings.maxDailyReplies)}" />
+      </div>
+      <div class="setting-row vertical">
+        <b>静默时段</b>
+        <input class="input" data-wecom-advanced-field="quietHours" value="${escapeHtml(state.wecomAdvancedSettings.quietHours)}" />
+      </div>
+      <div class="wecom-setting-group"><b>触发设置</b><span class="subtle">控制好友消息、触发模式和关键词。</span></div>
+      ${triggerRows.map(([key, label]) => `<div class="setting-row"><b>${label}</b>${renderWechatSwitch(state.wecomAdvancedSettings[key], "advanced", key)}</div>`).join("")}
+      <div class="setting-row vertical">
+        <b>触发模式</b>
+        <select class="select" data-wecom-advanced-field="triggerMode">
+          ${renderSelectOptions(["关键词或@触发", "仅关键词触发", "仅@触发", "全部消息触发"], state.wecomAdvancedSettings.triggerMode)}
+        </select>
+      </div>
       <div class="setting-row vertical">
         <b>群聊触发关键词</b>
-        <input class="input" data-wechat-keywords value="${escapeHtml(state.wecomAdvancedSettings.keywords)}" />
+        <input class="input" data-wechat-keywords data-wecom-advanced-field="keywords" value="${escapeHtml(state.wecomAdvancedSettings.keywords)}" />
       </div>
     </div>`;
 }
@@ -224,7 +264,7 @@ function renderChannelWorkbench() {
       <button class="button primary" data-page="chat">进入聚合对话</button>
     </div>
     <div class="workbench-grid">
-      ${cards.map(([title, desc, icon]) => `<div class="workbench-card" ${icon === "chat" ? `data-page="chat"` : `data-demo-action="${title}入口为 Demo 展示"`}>
+      ${cards.map(([title, desc, icon]) => `<div class="workbench-card" ${icon === "chat" ? `data-page="chat"` : `data-wecom-workbench-action="${title}"`}>
         <span>${icon}</span>
         <b>${title}</b>
         <p>${desc}</p>
@@ -232,111 +272,93 @@ function renderChannelWorkbench() {
     </div>`;
 }
 
-function renderAccounts() {
-  return `
-    <div class="toolbar">
-      <div style="display:flex; gap:8px"><input class="input" placeholder="请输入托管账号名称"><select class="select"><option>请选择托管账号状态</option></select><button class="button">批量打标签</button></div>
-      <button class="button primary">托管账号标签管理</button>
-    </div>
-    <div class="table-card">
-      <table>
-        <thead><tr><th>账号信息/别名</th><th>状态</th><th>托管账号</th><th>账号ID</th><th>主体名称</th><th>消息接收</th><th>AI回复</th><th>绑定助手</th><th>操作</th></tr></thead>
-        <tbody>
-          <tr><td>👩 王丽<br><span class="subtle">别名：王丽</span></td><td><span class="tag green">在线</span> <span class="tag green">重启</span></td><td>ZhuLi01(1688854711425567)</td><td>65efc4ad2cb38280fa3f12a5</td><td>集简普通</td><td><span class="switch on" data-switch></span></td><td><span class="switch on" data-switch></span></td><td><span class="tag blue">物流客服助手</span></td><td><button class="button small" data-wechat-tab="console">控制台</button> <button class="button small">更多</button></td></tr>
-          <tr><td>👤 待托管<br><span class="subtle">别名：-</span></td><td><span class="tag orange">待托管</span> <span class="tag red">启动</span></td><td>待托管</td><td>66ebee1c05f51dab6acf4564</td><td>-</td><td><span class="switch" data-switch></span></td><td><span class="switch" data-switch></span></td><td>-</td><td><button class="button small" data-modal="authAccount">启动</button> <button class="button small">删除</button></td></tr>
-        </tbody>
-      </table>
-    </div>`;
-}
-
-function renderWechatStatus() {
-  const metrics = [
-    ["远程服务器节点", "华南节点", "在线"],
-    ["企业微信客户端", "在线", "刚刚心跳"],
-    ["WebSocket", "已连接", "延迟 24ms"],
-    ["消息队列", "正常", "0 条堆积"],
-    ["今日接收消息", "128", "较昨日 +12%"],
-    ["今日AI回复", "96", "命中知识库 74次"],
-    ["今日主动发送", "24", "成功率 100%"],
-    ["今日拉群任务", "3", "成功 3 次"],
-  ];
-  return `<div class="status-grid">${metrics.map(([a,b,c]) => `<div class="metric"><div class="subtle">${a}</div><div class="metric-value">${b}</div><span class="tag green">${c}</span></div>`).join("")}</div>
-  <div style="margin-top:18px; display:flex; gap:10px"><button class="button primary">重启托管实例</button><button class="button">暂停托管</button><button class="button">重新扫码</button><button class="button">查看远程日志</button></div>`;
-}
-
 function renderRobotConsole() {
   const logs = state.consoleStatus.length ? state.consoleStatus : ["等待提交远程控制指令"];
-  const accountOptions = state.wecomAccounts.map((account) => `<option>${account.name} / ${account.accountId}</option>`).join("");
+  const selectedAccount = state.wecomAccounts[0]?.id || "";
+  const selectedTargetType = state.wecomConsoleTargetType || "群聊";
+  const selectedContact = state.wecomConsoleContactId || state.wecomContacts?.[0]?.id || "";
+  const selectedGroup = state.wecomConsoleGroupId || state.wecomGroups?.[0]?.id || "";
+  const selectedTarget = selectedTargetType === "群聊"
+    ? window.wecomService?.getGroup(selectedGroup)
+    : state.wecomContacts?.find((contact) => contact.id === selectedContact);
+  const targetValue = selectedTargetType === "群聊"
+    ? selectedTarget ? `${selectedTarget.id} / ${selectedTarget.name}` : ""
+    : selectedTarget ? `${selectedTarget.id} / ${selectedTarget.name}` : "";
   return `
     <div class="console-grid">
       <div class="card">
         <h3>机器人控制台</h3>
-        <div class="form-row"><div class="label">选择托管账号</div><select class="select" style="width:100%">${accountOptions}</select></div>
-        <div class="form-row"><div class="label">目标类型</div><select class="select" style="width:100%"><option>群聊</option><option>联系人</option></select></div>
-        <div class="form-row"><div class="label">目标 ID / 名称</div><input class="input" id="consoleTarget" style="width:100%" value="R:107758403324120 / 欧诚国际物流&集简云对接群"></div>
+        <div class="form-row"><div class="label">选择托管账号</div><select class="select" id="consoleAccount" style="width:100%">${renderWechatAccountOptions(selectedAccount)}</select></div>
+        <div class="grid-2">
+          <div class="form-row"><div class="label">目标类型</div><select class="select" id="consoleTargetType" style="width:100%">${renderWechatOption("群聊", "群聊", selectedTargetType)}${renderWechatOption("联系人", "联系人", selectedTargetType)}</select></div>
+          <div class="form-row"><div class="label">联系人</div><select class="select" id="consoleContact" style="width:100%">${(state.wecomContacts || []).map((contact) => renderWechatOption(contact.id, `${contact.name} / ${contact.type}`, selectedContact)).join("")}</select></div>
+        </div>
+        <div class="form-row"><div class="label">群聊</div><select class="select" id="consoleGroup" style="width:100%">${state.wecomGroups.map((group) => renderWechatOption(group.id, `${group.name} / ${group.members}人`, selectedGroup)).join("")}</select></div>
+        <div class="form-row"><div class="label">目标 ID / 名称</div><input class="input" id="consoleTarget" style="width:100%" value="${escapeHtml(targetValue)}"></div>
         <div class="form-row"><div class="label">消息内容</div><textarea class="textarea" id="consoleMessage" style="width:100%">您好，Jelly AI 已接管企业微信客服，后续物流问题可直接在群里咨询。</textarea></div>
-        <div class="action-grid">${["发送文本", "发送图片", "发送文件", "创建群聊", "拉人进群", "修改群名称", "发送群公告"].map((x) => `<button class="button" data-console-action="${x}">${x}</button>`).join("")}</div>
+        <div class="action-grid">${["发送文本", "发送图片", "发送文件", "创建群聊", "拉人进群", "修改群名称", "发送群公告"].map((x) => `<button class="button" data-console-action="${x}" ${state.wecomLoading.console ? "disabled" : ""}>${state.wecomLoading.console ? "执行中" : x}</button>`).join("")}</div>
       </div>
       <div class="card">
         <h3>执行结果</h3>
-        ${logs.map((l, i) => `<div class="log-line"><span class="dot" style="${i === 0 && logs.length === 1 ? "background:#cbd5e1" : ""}"></span><div>${l}<div class="subtle">${logs.length > 1 ? "taskId: MOCK-20260618-001" : ""}</div></div></div>`).join("")}
+        ${logs.map((l, i) => `<div class="log-line"><span class="dot" style="${i === 0 && logs.length === 1 ? "background:#cbd5e1" : ""}"></span><div>${escapeHtml(l)}<div class="subtle">${logs.length > 1 ? `taskId: ${escapeHtml(state.consoleTaskId || "TASK-PENDING")}` : ""}</div></div></div>`).join("")}
       </div>
     </div>`;
 }
 
 function renderGroupManagement() {
+  const groups = window.wecomService?.listGroups() || state.wecomGroups;
   return `<div class="channel-section-head">
     <div><h1 class="page-title">群聊管理</h1><div class="subtle">管理托管账号可接收和可自动回复的企业微信群。</div></div>
-    <button class="button primary" data-demo-action="同步群聊">同步群聊</button>
+    <button class="button primary" data-wecom-group-action="sync" ${state.wecomLoading.groups ? "disabled" : ""}>${state.wecomLoading.groups ? "同步中" : "同步群聊"}</button>
+  </div>
+  <div class="member-toolbar wechat-filter-bar">
+    <input class="input" data-wechat-filter="wecomGroupQuery" placeholder="搜索群名称 / 群 ID / 最近消息" value="${escapeHtml(state.wecomGroupQuery)}" />
+    <button class="button" data-wechat-reset="groups">重置</button>
   </div>
   <div class="table-card"><table><thead><tr><th>群名称</th><th>群 ID</th><th>成员数</th><th>AI 回复</th><th>消息接收</th><th>禁止改群名</th><th>禁止互加好友</th><th>操作</th></tr></thead><tbody>
-    ${state.wecomGroups.map((group) => `<tr>
-      <td>👥 ${group.name}</td>
-      <td>${group.id}</td>
+    ${groups.length ? groups.map((group) => {
+      const account = getWechatAccount(group.accountId);
+      return `<tr>
+      <td>👥 ${escapeHtml(group.name)}<br><span class="subtle">托管账号：${escapeHtml(account?.name || "-")} · 最近：${escapeHtml(group.lastMessage || "-")}</span></td>
+      <td>${escapeHtml(group.id)}</td>
       <td>${group.members}</td>
       <td>${renderWechatSwitch(group.aiEnabled, "group-ai", group.id)}</td>
       <td>${renderWechatSwitch(group.messageEnabled, "group-message", group.id)}</td>
       <td>${renderWechatSwitch(group.lockName, "group-lock-name", group.id)}</td>
       <td>${renderWechatSwitch(group.blockAddFriend, "group-block-friend", group.id)}</td>
-      <td><button class="button small" data-demo-action="查看群成员">查看成员</button> <button class="button small" data-wechat-tab="console">发消息</button> <button class="button small" data-wechat-tab="rules">设置规则</button></td>
-    </tr>`).join("")}
+      <td><button class="button small" data-wecom-group-action="detail" data-wecom-id="${group.id}">群详情</button> <button class="button small" data-wechat-tab="console">发消息</button> <button class="button small" data-wechat-tab="rules">设置规则</button></td>
+    </tr>`;
+    }).join("") : `<tr><td colspan="8"><div class="empty">暂无匹配群聊</div></td></tr>`}
   </tbody></table></div>`;
-}
-
-function renderAlerts() {
-  return `<div class="card"><div class="toolbar"><h3>报警通知</h3><button class="button primary" data-modal="alertBot">添加报警机器人</button></div>
-  <div class="mini-card"><div class="mini-card-head">企业微信群报警机器人 <span class="tag green">已启用</span></div><div class="subtle">通知类型：托管账号掉线、群发任务异常、账号风控提醒、每日数据提醒</div></div>
-  <div class="mini-card"><div class="mini-card-head">报警规则设置</div><div class="subtle">掉线超过 5 分钟通知 · 连续失败 3 次通知 · 每日 09:00 发送日报</div></div></div>`;
 }
 
 function renderLogs() {
   const accountOptions = ["全部账号", ...state.wecomAccounts.map((account) => account.name)];
-  const filteredLogs = state.wecomLogs.filter((log) => {
-    const account = getWechatAccount(log.accountId);
-    const contentQuery = state.wechatLogQuery.trim();
-    const targetQuery = state.wechatLogTarget.trim();
-    const matchesContent = !contentQuery || log.content.includes(contentQuery) || log.reply.includes(contentQuery);
-    const matchesTarget = !targetQuery || log.target.includes(targetQuery);
-    const matchesType = state.wechatLogType === "全部类型" || log.type === state.wechatLogType;
-    const matchesAccount = state.wechatLogAccount === "全部账号" || account?.name === state.wechatLogAccount;
-    return matchesContent && matchesTarget && matchesType && matchesAccount;
-  });
+  const groupOptions = ["全部群聊", ...state.wecomGroups.map((group) => group.id)];
+  const filteredLogs = window.wecomService?.listLogs() || state.wecomLogs;
   return `<div class="channel-section-head">
     <div><h1 class="page-title">对话记录查询</h1><div class="subtle">查询企业微信托管产生的私聊、群聊和 AI 回复记录。</div></div>
   </div>
   <div class="member-toolbar wechat-filter-bar">
     <input class="input" data-wechat-filter="wechatLogQuery" placeholder="搜索聊天内容" value="${escapeHtml(state.wechatLogQuery)}" />
     <input class="input" data-wechat-filter="wechatLogTarget" placeholder="搜索好友或群" value="${escapeHtml(state.wechatLogTarget)}" />
-    <button class="button" data-demo-action="日期范围选择器已打开">2026-06-13　至　2026-06-20</button>
+    <input class="input" type="date" data-wechat-filter="wechatLogDateStart" value="${escapeHtml(state.wechatLogDateStart)}" />
+    <input class="input" type="date" data-wechat-filter="wechatLogDateEnd" value="${escapeHtml(state.wechatLogDateEnd)}" />
     <select class="select" data-wechat-filter="wechatLogType">${renderSelectOptions(["全部类型", "私聊", "群聊"], state.wechatLogType)}</select>
     <select class="select" data-wechat-filter="wechatLogAccount">${renderSelectOptions(accountOptions, state.wechatLogAccount)}</select>
+    <select class="select" data-wechat-filter="wechatLogGroup">${groupOptions.map((groupId) => {
+      const group = state.wecomGroups.find((item) => item.id === groupId);
+      return renderWechatOption(groupId, group ? group.name : groupId, state.wechatLogGroup);
+    }).join("")}</select>
     <button class="button" data-wechat-reset="logs">重置</button>
-    <button class="button primary" data-demo-action="查询对话记录">搜索</button>
+    <button class="button primary" data-wecom-log-action="search">搜索</button>
+    <button class="button" data-wecom-log-action="export" ${state.wecomLoading.logs ? "disabled" : ""}>${state.wecomLoading.logs ? "导出中" : "导出"}</button>
   </div>
+  ${state.wecomLastExport ? `<div class="wecom-inline-note">${escapeHtml(state.wecomLastExport)}</div>` : ""}
   <div class="table-card channel-table-gap"><table><thead><tr><th>时间</th><th>操作人</th><th>操作类型</th><th>所属托管账号</th><th>目标</th><th>聊天类型</th><th>聊天内容 / AI 回复</th><th>状态</th><th>详情</th></tr></thead><tbody>
     ${filteredLogs.length ? filteredLogs.map((log) => {
       const account = getWechatAccount(log.accountId);
-      return `<tr><td>${log.time}</td><td>${log.operator}</td><td>${log.operation}</td><td>${account?.name || "-"}</td><td>${log.target}</td><td>${log.type}</td><td><b>${log.content}</b><br><span class="subtle">${log.reply}</span></td><td>${renderWechatStatusTag(log.status)}</td><td>${log.detail}</td></tr>`;
+      return `<tr><td>${escapeHtml(log.time)}</td><td>${escapeHtml(log.operator)}</td><td>${escapeHtml(log.operation)}</td><td>${escapeHtml(account?.name || "-")}</td><td>${escapeHtml(log.target)}</td><td>${escapeHtml(log.type)}</td><td><b>${escapeHtml(log.content)}</b><br><span class="subtle">${escapeHtml(log.reply)}</span></td><td>${renderWechatStatusTag(log.status)}</td><td>${escapeHtml(log.detail)}</td></tr>`;
     }).join("") : `<tr><td colspan="9"><div class="empty">暂无匹配记录</div></td></tr>`}
   </tbody></table></div>`;
 }

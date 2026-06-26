@@ -6,6 +6,9 @@
 - WeCom real hosting is not connected yet. Current API stores account status/settings locally; RPA heartbeat, QR login, webhook ingest, and message sync workers still need implementation.
 - Vector search is not connected yet. `knowledge_bases` records document/vector counts locally; real embedding pipeline and vector database remain TODO.
 - Object storage is not connected yet. Knowledge upload paths are local placeholders until bucket credentials and upload pipeline are added.
+- Channel account connect/test/delete is mocked in the customer-web service adapter. `GET /api/app/channels` is real; account authorization and account CRUD endpoints still need implementation.
+- Conversation settings such as custom views, quick replies, working hours, automation, forwarding, notes, tags, stars, and read state are local/mock in V1. Conversation list/messages/send are real.
+- Agent skills/tools/delete/chat-test APIs are local/mock in V1. Agent list/detail/create/update are real.
 
 ## Backend Follow-Ups
 
@@ -17,11 +20,12 @@
 
 ## Frontend Follow-Ups
 
-- Convert the static workspace iframe into native Next/React routes once today’s demo surface is stable.
+- Productize `apps/customer-web` into a first-class customer front deployment after today’s static-module demo surface is stable.
 - Add loading/error indicators inside each module rather than relying only on the global fullstack API adapter.
-- Persist WeCom UI toggle actions directly through `PATCH /api/app/wecom/accounts`.
-- Wire knowledge upload/create wizard to `POST /api/app/knowledge-bases`.
-- Expand agent detail editing to call `PATCH /api/app/agents/:id`.
+- Keep front and admin as separate sites in local/dev/prod. V1 uses `apps/customer-web` for the customer front and Next.js for admin/API.
+- Persist WeCom rule, group, sidebar, workbench, and console actions through dedicated `/api/app/wecom/*` endpoints.
+- Wire knowledge upload, chunk preview, embedding, and reindex jobs to dedicated `/api/app/knowledge-bases/*` endpoints.
+- Expand agent skill/tool binding and delete actions to dedicated `/api/app/agents/:id/*` endpoints.
 
 ## Testing Follow-Ups
 

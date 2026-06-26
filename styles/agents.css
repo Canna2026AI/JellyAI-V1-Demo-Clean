@@ -251,7 +251,15 @@
   position: absolute;
   top: 18px;
   right: 20px;
+  border: 0;
+  background: transparent;
   color: #98a2b3;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.skill-card-menu:hover {
+  color: var(--blue);
 }
 
 .skill-logo {
@@ -438,6 +446,13 @@
   color: #98a2b3;
 }
 
+.dashed-empty.compact-empty {
+  height: auto;
+  min-height: 72px;
+  margin: 10px 0;
+  padding: 12px;
+}
+
 .empty-icon {
   font-size: 30px;
   color: #c4ccd8;
@@ -544,10 +559,59 @@
   width: 260px;
   min-height: 92px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 14px;
   box-shadow: var(--shadow);
+}
+
+.assistant-card-main {
+  min-width: 0;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.assistant-card-copy {
+  min-width: 0;
+}
+
+.assistant-card-name {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.assistant-card-desc {
+  max-width: 132px;
+  margin: 4px 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.assistant-card-action {
+  flex: 0 0 auto;
+  min-width: 54px;
+  white-space: nowrap;
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+}
+
+.agent-empty-state {
+  width: 360px;
+  min-height: 150px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+}
+
+.assistant-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .assistant-card:hover {
@@ -629,7 +693,9 @@
 .detail-body {
   display: grid;
   grid-template-columns: 600px 1fr;
-  min-height: calc(100vh - 152px);
+  height: calc(100vh - 152px);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .config-panel {
@@ -637,12 +703,14 @@
   border-right: 1px solid var(--line);
   padding: 28px 28px 26px;
   overflow: auto;
+  min-height: 0;
 }
 
 .preview-panel {
   background: #f3f5f8;
   padding: 18px 24px;
-  overflow: auto;
+  height: calc(100vh - 152px);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -746,7 +814,11 @@
 }
 
 .detail-prompt {
-  height: 340px;
+  height: 260px;
+}
+
+.rich-editor.expanded {
+  min-height: 420px;
 }
 
 .detail-examples {
@@ -777,7 +849,7 @@
 }
 
 .opening-editor {
-  height: 86px;
+  height: 70px;
 }
 
 .quick-input-line {
@@ -804,6 +876,19 @@
   width: 100%;
   margin-top: 8px;
   background: #fff;
+}
+
+.detail-sticky-actions {
+  position: sticky;
+  bottom: -26px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 8px -28px -26px;
+  padding: 12px 28px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(4px);
 }
 
 .detail-tool-empty {
@@ -841,6 +926,21 @@
   padding: 0 10px;
   color: #667085;
   font-size: 12px;
+}
+
+.editor-toolbar button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+  cursor: pointer;
+}
+
+.editor-toolbar .link-button {
+  font-weight: 600;
+  color: var(--blue);
 }
 
 .rich-editor {
@@ -903,6 +1003,12 @@
   font-weight: 700;
 }
 
+.agent-tool-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .tag {
   display: inline-flex;
   align-items: center;
@@ -938,7 +1044,10 @@
   max-width: 760px;
   width: 100%;
   margin: 0 auto;
-  flex: 1;
+  flex: 0 1 auto;
+  max-height: min(460px, calc(100vh - 300px));
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .message {
@@ -975,11 +1084,12 @@
 .chat-input {
   max-width: 760px;
   width: 100%;
-  margin: auto auto 0;
+  margin: 10px auto 0;
   background: #fff;
   border: 1px solid var(--line-dark);
   border-radius: 8px;
   padding: 10px;
+  flex: 0 0 auto;
 }
 
 .chat-input textarea {
@@ -990,3 +1100,103 @@
   resize: none;
 }
 
+.chat-input-tools {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chat-tool-btn {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: #667085;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.chat-tool-btn:hover {
+  color: var(--blue);
+}
+
+.info-tip {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  border: 1px solid #98a2b3;
+  border-radius: 50%;
+  color: #667085;
+  font-size: 12px;
+  cursor: help;
+}
+
+.info-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  transform: translateX(-50%);
+  z-index: 8;
+  width: 260px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: #111827;
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(16, 24, 40, 0.2);
+  line-height: 1.5;
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.info-tip:hover::after,
+.info-tip:focus::after {
+  opacity: 1;
+}
+
+.quick-question-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.quick-question-list button {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #475467;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.tool-picker-list label {
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #475467;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tool-picker-list label.active,
+.tool-picker-list label:hover {
+  background: #eef4ff;
+  color: var(--blue);
+}
+
+.tool-picker-list label input {
+  margin: 0;
+}

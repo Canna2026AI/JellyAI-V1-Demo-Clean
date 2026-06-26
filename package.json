@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "node scripts/dev-all.mjs",
+    "dev:admin": "next dev --webpack -p 3000",
+    "dev:front": "node apps/customer-web/server.mjs",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",

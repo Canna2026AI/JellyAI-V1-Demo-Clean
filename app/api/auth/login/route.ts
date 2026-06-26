@@ -4,6 +4,7 @@ import { createSession } from "@/lib/auth/session";
 import { verifyPassword } from "@/lib/auth/password";
 import { getDb } from "@/lib/db";
 import { auditLogs, tenants, users } from "@/lib/db/schema";
+import { getCustomerWebUrl } from "@/lib/urls";
 import { loginSchema } from "@/lib/validators";
 
 export async function POST(request: Request) {
@@ -42,6 +43,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ok: true,
-    redirectTo: user.role === "platform_admin" ? "/admin" : "/app/workspace?module=conversations",
+    redirectTo: user.role === "platform_admin" ? "/admin" : getCustomerWebUrl("/?module=conversations"),
   });
 }

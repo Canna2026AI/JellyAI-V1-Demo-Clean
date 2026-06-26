@@ -1,1 +1,0 @@
-// Knowledge module entry placeholder.

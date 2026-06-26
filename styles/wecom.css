@@ -49,6 +49,7 @@
   grid-template-columns: 216px 1fr;
   min-height: calc(100vh - 52px);
   background: var(--bg);
+  min-width: 0;
 }
 
 .channel-profile-panel {
@@ -134,10 +135,12 @@
 
 .channel-manage-main {
   padding: 24px 28px;
+  min-width: 0;
 }
 
 .channel-manage-main .table-card {
   overflow-x: auto;
+  max-width: 100%;
 }
 
 .channel-manage-main table {
@@ -261,7 +264,7 @@
 }
 
 .action-cell {
-  min-width: 270px;
+  min-width: 360px;
 }
 
 .action-cell .button {
@@ -287,6 +290,21 @@
 .settings-list {
   display: grid;
   gap: 12px;
+}
+
+.wecom-setting-group {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+  padding: 2px 2px 0;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .setting-row {
@@ -339,6 +357,18 @@
 .workbench-card:hover {
   border-color: #b8c4d6;
   box-shadow: var(--shadow);
+}
+
+.workbench-card,
+.channel-top-tabs button,
+.tree-row.child,
+.selected-member .button {
+  cursor: pointer;
+}
+
+.tree-row.child:hover,
+.selected-member:hover {
+  background: #f8fafc;
 }
 
 .workbench-card span {
@@ -406,6 +436,10 @@
   margin-top: 16px;
 }
 
+.selected-member + .selected-member {
+  margin-top: 8px;
+}
+
 .log-line {
   display: flex;
   gap: 10px;
@@ -422,3 +456,81 @@
   background: var(--green);
 }
 
+.wecom-pagination {
+  min-width: 920px;
+  min-height: 48px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.wecom-pagination > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wecom-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.wecom-detail-grid > div {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px;
+  background: #fff;
+  display: grid;
+  gap: 4px;
+}
+
+.wecom-detail-grid span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.wecom-detail-grid b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.wecom-detail-grid + .mini-card,
+.wecom-detail-grid + .mini-card + .mini-card {
+  padding: 10px;
+  margin-top: 8px;
+}
+
+.wecom-inline-note {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: #475467;
+  font-size: 12px;
+}
+
+.wecom-compact-form .form-row {
+  margin-bottom: 9px;
+}
+
+.wecom-compact-form .label {
+  margin-bottom: 4px;
+}
+
+.wecom-compact-form .grid-2 {
+  gap: 10px;
+}
+
+.wecom-compact-form .input,
+.wecom-compact-form .select {
+  min-height: 32px;
+}

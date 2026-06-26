@@ -1,1 +1,1 @@
-// WeCom hosting module entry placeholder.
+// WeCom hosting module entry.

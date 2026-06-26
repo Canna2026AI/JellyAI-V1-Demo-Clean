@@ -1,22 +1,218 @@
 // AI agents page and modal events.
 
+if (!window.__jellyAgentDelegatedEventsBound) {
+  window.__jellyAgentDelegatedEventsBound = true;
+  document.addEventListener(
+    "click",
+    (event) => {
+      const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+      if (!target) return;
+
+      const detailTab = target.closest("[data-detail-tab]");
+      if (detailTab) {
+        event.preventDefault();
+        event.stopPropagation();
+        setState({ detailTab: detailTab.dataset.detailTab });
+        return;
+      }
+
+      const assistantSub = target.closest("[data-assistant-sub]");
+      if (assistantSub) {
+        event.preventDefault();
+        event.stopPropagation();
+        setState({ page: "ai", selectedAssistant: null, selectedAgentId: null, assistantSub: assistantSub.dataset.assistantSub });
+        return;
+      }
+
+      const agentBack = target.closest("[data-agent-back]");
+      if (agentBack) {
+        event.preventDefault();
+        event.stopPropagation();
+        setState({ page: "ai", selectedAssistant: null, selectedAgentId: null, assistantSub: "assistant", detailTab: "setting", detailModelOpen: false });
+        return;
+      }
+
+      const editorCommand = target.closest("[data-editor-command]");
+      if (editorCommand) {
+        event.preventDefault();
+        event.stopPropagation();
+        handleEditorCommand(editorCommand.dataset.editorCommand, editorCommand.dataset.editorTarget);
+        return;
+      }
+
+      const editorAction = target.closest("[data-editor-action]");
+      if (editorAction) {
+        event.preventDefault();
+        event.stopPropagation();
+        handleEditorAction(editorAction.dataset.editorAction, editorAction.dataset.editorTarget);
+        return;
+      }
+
+      const addQuick = target.closest("[data-agent-add-quick]");
+      if (addQuick) {
+        event.preventDefault();
+        event.stopPropagation();
+        addAgentQuickQuestion();
+        return;
+      }
+
+      const useQuick = target.closest("[data-agent-use-quick]");
+      if (useQuick) {
+        event.preventDefault();
+        event.stopPropagation();
+        insertAssistantInputText(useQuick.dataset.agentUseQuick);
+        showToast("快捷提问已放入聊天预览");
+        return;
+      }
+
+      const chatTool = target.closest("[data-chat-tool]");
+      if (chatTool) {
+        event.preventDefault();
+        event.stopPropagation();
+        handleChatTool(chatTool.dataset.chatTool);
+        return;
+      }
+
+      const skillTemplate = target.closest("[data-skill-template-jump]");
+      if (skillTemplate) {
+        event.preventDefault();
+        event.stopPropagation();
+        setState({ page: "ai", selectedAssistant: null, selectedAgentId: null, assistantSub: "skill", skillFilter: "template" });
+        return;
+      }
+
+      const agentModal = target.closest("[data-modal]");
+      if (agentModal && ["createAssistant", "deleteAssistant", "importSkill", "addSkillTool", "associateKnowledge", "deleteSkill", "deleteKnowledge", "createCustomTool", "assistantToolPicker"].includes(agentModal.dataset.modal)) {
+        event.preventDefault();
+        event.stopPropagation();
+        setState({ modal: agentModal.dataset.modal, topPopover: null });
+        return;
+      }
+
+      const agentPage = target.closest("[data-page]");
+      if (agentPage && ["knowledgeCreate", "flow", "wechat"].includes(agentPage.dataset.page)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (agentPage.dataset.page === "knowledgeCreate" && typeof resetKnowledgeCreateState === "function") {
+          resetKnowledgeCreateState({ page: "knowledgeCreate", selectedAssistant: null, assistantSub: "knowledge", topPopover: null, agentStatusOpen: false });
+          return;
+        }
+        setState({ page: agentPage.dataset.page, selectedAssistant: null, selectedAgentId: null, topPopover: null, agentStatusOpen: false });
+        return;
+      }
+
+      const demoAction = target.closest("[data-demo-action]");
+      if (demoAction) {
+        event.preventDefault();
+        event.stopPropagation();
+        showToast(`${demoAction.dataset.demoAction}（Demo）`);
+      }
+    },
+    true
+  );
+}
+
+function bindAgentSearchInput(selector, stateKey, options = {}) {
+  const input = document.querySelector(selector);
+  if (!input) return;
+  input.addEventListener("input", () => {
+    const cursor = input.selectionStart || input.value.length;
+    options.beforeRender?.();
+    state[stateKey] = input.value;
+    render();
+    const nextInput = document.querySelector(selector);
+    if (nextInput) {
+      nextInput.focus();
+      nextInput.setSelectionRange(cursor, cursor);
+    }
+  });
+}
+
 function bindAgentEvents() {
-document.querySelectorAll("[data-assistant-sub]").forEach((el) =>
+  ensureAgentState();
+  syncAgentDataFromBackend();
+  bindAgentSearchInput("[data-agent-search]", "agentSearchQuery");
+  bindAgentSearchInput("[data-agent-knowledge-search]", "agentKnowledgeSearchQuery");
+  bindAgentSearchInput("[data-skill-search]", "skillSearchQuery");
+  bindAgentSearchInput("[data-ai-tool-search]", "aiToolSearchQuery");
+  bindAgentSearchInput("[data-agent-intent-search]", "agentIntentSearchQuery");
+  bindAgentSearchInput("[data-agent-summary-search]", "agentSummarySearchQuery");
+  bindAgentSearchInput("[data-agent-model-search]", "agentModelSearchQuery", { beforeRender: captureAgentSettingsDraft });
+  document.querySelectorAll("[data-agent-filter]").forEach((el) =>
+    el.addEventListener("click", () => setState({ agentStatusFilter: el.dataset.agentFilter }))
+  );
+  document.querySelectorAll("[data-agent-status-toggle]").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void toggleAgentStatus(el.dataset.agentStatusToggle);
+    })
+  );
+  document.querySelector("[data-agent-back]")?.addEventListener("click", () =>
+    setState({ page: "ai", selectedAssistant: null, selectedAgentId: null, assistantSub: "assistant", detailTab: "setting", detailModelOpen: false })
+  );
+  document.querySelectorAll("[data-assistant-sub]").forEach((el) =>
     el.addEventListener("click", () => setState({ page: "ai", selectedAssistant: null, assistantSub: el.dataset.assistantSub }))
   );
-  document.querySelectorAll("[data-open-assistant]").forEach((el) => el.addEventListener("click", () => setState({ selectedAssistant: el.dataset.openAssistant, detailTab: "setting" })));
+  document.querySelectorAll("[data-open-assistant]").forEach((el) => el.addEventListener("click", () => openAgent(el.dataset.openAssistant, "setting")));
   document.querySelectorAll("[data-detail-tab]").forEach((el) => el.addEventListener("click", () => setState({ detailTab: el.dataset.detailTab })));
   const modelToggle = document.querySelector("[data-toggle-model-panel]");
-  if (modelToggle) modelToggle.addEventListener("click", () => setState({ detailModelOpen: !state.detailModelOpen }));
+  if (modelToggle) modelToggle.addEventListener("click", () => {
+    captureAgentSettingsDraft();
+    setState({ detailModelOpen: !state.detailModelOpen });
+  });
   document.querySelectorAll("[data-detail-model]").forEach((el) =>
     el.addEventListener("click", () => {
+      captureAgentSettingsDraft();
+      state.agentSettingsDraft.model = el.dataset.detailModel;
       state.detailModelOpen = false;
       showToast(`已选择模型：${el.dataset.detailModel}`);
       render();
     })
   );
-  document.querySelectorAll("[data-detail-action]").forEach((el) =>
-    el.addEventListener("click", () => showToast(`${el.dataset.detailAction}已触发`))
+  const saveSettings = document.querySelector("[data-agent-save-settings]");
+  if (saveSettings) saveSettings.addEventListener("click", () => void saveAgentSettings());
+  document.querySelectorAll("[data-agent-remove-knowledge]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const agent = getSelectedAgent();
+      void setAgentRelation(agent, "knowledgeBaseIds", agent.knowledgeBaseIds.filter((id) => id !== el.dataset.agentRemoveKnowledge), "知识库已移除");
+    })
+  );
+  document.querySelectorAll("[data-agent-remove-skill]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const agent = getSelectedAgent();
+      void setAgentRelation(agent, "skillIds", agent.skillIds.filter((id) => id !== el.dataset.agentRemoveSkill), "技能已移除");
+    })
+  );
+  document.querySelectorAll("[data-agent-remove-tool]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const agent = getSelectedAgent();
+      void setAgentRelation(agent, "toolIds", agent.toolIds.filter((id) => id !== el.dataset.agentRemoveTool), "工具已移除");
+    })
+  );
+  document.querySelectorAll("[data-agent-delete-knowledge]").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setState({ modal: "deleteKnowledge", selectedKnowledgeBaseId: el.dataset.agentDeleteKnowledge });
+    })
+  );
+  document.querySelectorAll("[data-editor-command]").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
+      handleEditorCommand(el.dataset.editorCommand, el.dataset.editorTarget);
+    })
+  );
+  document.querySelectorAll("[data-editor-action]").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
+      handleEditorAction(el.dataset.editorAction, el.dataset.editorTarget);
+    })
+  );
+  document.querySelector("[data-agent-add-quick]")?.addEventListener("click", addAgentQuickQuestion);
+  document.querySelectorAll("[data-agent-use-quick]").forEach((el) =>
+    el.addEventListener("click", () => {
+      insertAssistantInputText(el.dataset.agentUseQuick);
+      showToast("快捷提问已放入聊天预览");
+    })
   );
   document.querySelectorAll("[data-tool-picker-tab]").forEach((el) =>
     el.addEventListener("click", () => setState({ detailToolPickerTab: el.dataset.toolPickerTab }))
@@ -25,15 +221,36 @@ document.querySelectorAll("[data-assistant-sub]").forEach((el) =>
     el.addEventListener("click", () => showToast(`已选择应用：${el.dataset.toolPickerApp}`))
   );
 
-document.querySelectorAll("[data-skill-filter]").forEach((el) =>
+  document.querySelectorAll("[data-skill-filter]").forEach((el) =>
     el.addEventListener("click", () => setState({ skillFilter: el.dataset.skillFilter }))
+  );
+  document.querySelector("[data-skill-template-jump]")?.addEventListener("click", () =>
+    setState({ page: "ai", selectedAssistant: null, selectedAgentId: null, assistantSub: "skill", skillFilter: "template" })
   );
   const skillGuideClose = document.querySelector("[data-skill-guide-close]");
   if (skillGuideClose) skillGuideClose.addEventListener("click", () => setState({ skillGuideVisible: false }));
   const skillChannel = document.querySelector("[data-skill-channel]");
-  if (skillChannel) skillChannel.addEventListener("click", () => showToast("渠道筛选已展开"));
+  if (skillChannel) skillChannel.addEventListener("click", () => {
+    const channels = ["all", ...Array.from(new Set(skills.map((skill) => skill.channel)))];
+    const index = channels.indexOf(state.skillChannelFilter || "all");
+    const next = channels[(index + 1) % channels.length];
+    setState({ skillChannelFilter: next });
+    showToast(next === "all" ? "已显示全部渠道技能" : `已筛选渠道：${next}`);
+  });
   document.querySelectorAll("[data-skill-open]").forEach((el) =>
     el.addEventListener("click", () => setState({ page: "skillEdit", selectedAssistant: null, assistantSub: "skill", selectedSkillId: el.dataset.skillOpen }))
+  );
+  document.querySelectorAll("[data-skill-card-menu]").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const skill = skills.find((item) => item.id === el.dataset.skillCardMenu);
+      if (!skill) return;
+      if (skill.source === "template") {
+        showToast(`已选中模板：${skill.name}，点击卡片可进入配置`);
+        return;
+      }
+      setState({ page: "skillEdit", selectedAssistant: null, assistantSub: "skill", selectedSkillId: skill.id });
+    })
   );
   const skillCreate = document.querySelector("[data-skill-create]");
   if (skillCreate) skillCreate.addEventListener("click", () => setState({ page: "skillEdit", selectedAssistant: null, assistantSub: "skill", selectedSkillId: null }));
@@ -42,8 +259,7 @@ document.querySelectorAll("[data-skill-filter]").forEach((el) =>
   );
   const skillSave = document.querySelector("[data-skill-save]");
   if (skillSave) skillSave.addEventListener("click", () => {
-    showToast(state.selectedSkillId ? "技能已保存" : "技能已创建并启用");
-    setState({ page: "ai", assistantSub: "skill", selectedSkillId: null });
+    void saveSkillFromEditor();
   });
   document.querySelectorAll("[data-ai-tool-filter]").forEach((el) =>
     el.addEventListener("click", () => setState({ aiToolFilter: el.dataset.aiToolFilter }))
@@ -59,13 +275,40 @@ document.querySelectorAll("[data-skill-filter]").forEach((el) =>
       setState({ page: "ai", assistantSub: "auto" });
     });
   }
+  document.querySelectorAll("[data-automation-toggle]").forEach((el) =>
+    el.addEventListener("click", () => showToast(`${el.dataset.automationToggle}已更新`))
+  );
 
-const assistantSend = document.getElementById("assistantSend");
+  const assistantInput = document.getElementById("assistantInput");
+  if (assistantInput) {
+    assistantInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendAssistantMessage();
+      }
+    });
+  }
+  const assistantSend = document.getElementById("assistantSend");
   if (assistantSend) assistantSend.addEventListener("click", sendAssistantMessage);
+  document.querySelectorAll("[data-chat-tool]").forEach((el) =>
+    el.addEventListener("click", () => handleChatTool(el.dataset.chatTool))
+  );
 }
 
 function bindAgentModalEvents() {
-document.querySelectorAll("[data-import-skill-select]").forEach((el) =>
+  document.querySelectorAll("[data-close-modal]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.agentModalSelection = [];
+      state.agentToolSelection = [];
+      state.agentModalAgentId = null;
+      state.agentToolModalAgentId = null;
+      state.agentSkillModalAgentId = null;
+      state.importSkillSearchQuery = "";
+      state.agentToolPickerSearchQuery = "";
+      state.agentModelSearchQuery = "";
+    })
+  );
+  document.querySelectorAll("[data-import-skill-select]").forEach((el) =>
     el.addEventListener("change", () => {
       const skillId = el.dataset.importSkillSelect;
       const selected = new Set(state.importSkillSelected);
@@ -74,17 +317,58 @@ document.querySelectorAll("[data-import-skill-select]").forEach((el) =>
       setState({ importSkillSelected: Array.from(selected) });
     })
   );
+  bindAgentSearchInput("[data-import-skill-search]", "importSkillSearchQuery");
+  bindAgentSearchInput("[data-tool-picker-search]", "agentToolPickerSearchQuery");
+  document.querySelectorAll("[data-agent-knowledge-select]").forEach((el) =>
+    el.addEventListener("change", () => {
+      const selected = new Set(state.agentModalSelection);
+      if (el.checked) selected.add(el.dataset.agentKnowledgeSelect);
+      else selected.delete(el.dataset.agentKnowledgeSelect);
+      setState({ agentModalSelection: Array.from(selected) });
+    })
+  );
+  document.querySelectorAll("[data-agent-tool-select]").forEach((el) =>
+    el.addEventListener("change", () => {
+      const selected = new Set(state.agentToolSelection);
+      if (el.checked) selected.add(el.dataset.agentToolSelect);
+      else selected.delete(el.dataset.agentToolSelect);
+      setState({ agentToolSelection: Array.from(selected) });
+    })
+  );
 }
 
-function sendAssistantMessage() {
+async function sendAssistantMessage() {
+  const agent = getSelectedAgent();
   const input = document.getElementById("assistantInput");
   const text = input.value.trim();
-  if (!text) return;
-  state.messages.push({ role: "user", text });
-  state.messages.push({
-    role: "assistant",
-    text: "已根据物流问答知识库为您查询：该渠道支持欧洲多国派送，具体价格需要根据重量、派送国家、地址类型和件数核算。",
-    meta: "多模态知识库：物流问答 · 执行成功 · 消耗 token：532 · 动作执行：1次 · 预估费用：0.001元",
-  });
+  if (!text || !agent || state.agentChatLoading) return;
+  const localUserMessage = { role: "user", text };
+  agent.messages.push(localUserMessage);
+  input.value = "";
+  state.agentChatLoading = true;
   render();
+  const api = getAgentApi();
+  try {
+    if (api) {
+      const result = await api.sendChat(agent.id, text);
+      agent.messages = result.messages || [...agent.messages, result.assistantMessage];
+      state.agentChatLoading = false;
+      render();
+      return;
+    }
+  } catch (error) {
+    if (state.agentBackendLoaded) {
+      state.agentChatLoading = false;
+      handleAgentApiError(error, "聊天预览失败");
+      render();
+      return;
+    }
+    handleAgentApiError(error, "后端未连接，已返回页面内模拟回复");
+  }
+  window.setTimeout(() => {
+    const reply = generateAgentReply(agent, text);
+    agent.messages.push({ role: "assistant", text: reply.text, meta: reply.meta });
+    state.agentChatLoading = false;
+    render();
+  }, 450);
 }

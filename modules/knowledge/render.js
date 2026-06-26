@@ -7,7 +7,157 @@ function renderStandaloneKnowledge() {
   </section>`;
 }
 
+function renderKnowledgeManager() {
+  ensureKnowledgeState();
+  const rows = knowledgeRuntime.list({
+    query: state.knowledgeSearchQuery,
+    status: state.knowledgeStatusFilter,
+    sort: state.knowledgeSort,
+  });
+  const page = knowledgePaginate(rows, state.knowledgePage, state.knowledgePageSize);
+  const selected = rows.find((kb) => kb.id === state.knowledgeSelectedId) || rows[0] || null;
+  const totalDocs = knowledgeBases.reduce((sum, kb) => sum + kb.documentCount, 0);
+  const totalChunks = knowledgeBases.reduce((sum, kb) => sum + kb.chunkCount, 0);
+
+  return `<div class="module-content ai-manager-page knowledge-manager-page">
+    <div class="knowledge-list-head">
+      <div>
+        <h1 class="page-title">知识库列表</h1>
+        <div class="subtle">您可以通过上传文档，数据库，网站页面等方式创建知识内容，AI应用可以基于此知识进行对话 <button class="link-button" type="button" data-knowledge-docs>了解更多</button></div>
+      </div>
+      <div class="capacity">空间容量： ${knowledgeTotalSize()} / 1024M</div>
+    </div>
+    <div class="knowledge-summary-strip">
+      <div><span>知识库</span><b>${knowledgeBases.length}</b></div>
+      <div><span>文档</span><b>${totalDocs}</b></div>
+      <div><span>Chunk</span><b>${totalChunks}</b></div>
+      <div><span>索引状态</span><b>${knowledgeBases.filter((kb) => kb.embeddingStatus === "已完成").length}/${knowledgeBases.length}</b></div>
+    </div>
+    <div class="knowledge-tools">
+      <button class="button primary" data-page="knowledgeCreate">＋ 新增知识库</button>
+      <input class="input search-input" placeholder="搜索名称、类型或描述" value="${escapeHtml(state.knowledgeSearchQuery)}" data-knowledge-search />
+      <select class="select knowledge-select" data-knowledge-status>
+        ${knowledgeStatusOptions.map((option) => `<option ${option === state.knowledgeStatusFilter ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}
+      </select>
+      <select class="select knowledge-select" data-knowledge-sort>
+        ${knowledgeSortOptions.map((option) => `<option value="${option.id}" ${option.id === state.knowledgeSort ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+      </select>
+    </div>
+    ${state.knowledgeLoading ? `<div class="knowledge-loading">加载中...</div>` : ""}
+    <div class="knowledge-console">
+      <section class="knowledge-list-panel">
+        ${page.items.length ? page.items.map(renderKnowledgeListCard).join("") : renderKnowledgeEmpty()}
+        ${renderKnowledgePagination(rows.length, page.page, page.totalPages)}
+      </section>
+      <section class="knowledge-detail-panel">
+        ${selected ? renderKnowledgeDetail(selected) : `<div class="empty">请选择或创建知识库</div>`}
+      </section>
+    </div>
+  </div>`;
+}
+
+function renderKnowledgeListCard(kb) {
+  const selected = state.knowledgeSelectedId === kb.id;
+  return `<article class="knowledge-card knowledge-list-card ${selected ? "active" : ""}" data-knowledge-select="${escapeHtml(kb.id)}">
+    <div class="knowledge-card-top">
+      <div class="knowledge-card-icon">${escapeHtml(kb.icon)}</div>
+      <div>
+        <div class="knowledge-card-name">${escapeHtml(kb.name)}</div>
+        <div class="subtle">${escapeHtml(kb.description)}</div>
+      </div>
+      ${knowledgeStatusTag(kb.status)}
+    </div>
+    <div class="knowledge-card-count">▧ ${knowledgeFormatCount(kb)}</div>
+    <div class="knowledge-card-meta">
+      <span>${escapeHtml(kb.sourceType)}</span>
+      <span>${escapeHtml(kb.size)}</span>
+      <span>更新 ${escapeHtml(kb.updatedAt)}</span>
+    </div>
+    <div class="knowledge-card-footer">
+      ${knowledgeEmbeddingTag(kb.embeddingStatus)}
+      <div>
+        <button class="button ghost small" title="${escapeHtml(knowledgeActionTitle(kb.enabled ? "停用" : "启用", kb))}" data-knowledge-toggle="${escapeHtml(kb.id)}">${kb.enabled ? "停用" : "启用"}</button>
+        <button class="button ghost small" title="${escapeHtml(knowledgeActionTitle("编辑", kb))}" data-knowledge-edit="${escapeHtml(kb.id)}">编辑</button>
+        <button class="button ghost small" title="${escapeHtml(knowledgeActionTitle("重新索引", kb))}" data-knowledge-reindex="${escapeHtml(kb.id)}" ${state.knowledgeActionLoadingId === kb.id ? "disabled" : ""}>${state.knowledgeActionLoadingId === kb.id ? "索引中" : "重新索引"}</button>
+        <button class="button ghost small" title="${escapeHtml(knowledgeActionTitle("删除", kb))}" data-knowledge-delete="${escapeHtml(kb.id)}">删除</button>
+      </div>
+    </div>
+  </article>`;
+}
+
+function renderKnowledgeEmpty() {
+  return `<div class="empty knowledge-empty">
+    <div class="empty-icon">▤</div>
+    <div>暂无匹配知识库</div>
+    <span class="subtle">调整搜索或筛选条件，或新增一个知识库。</span>
+  </div>`;
+}
+
+function renderKnowledgePagination(total, page, totalPages) {
+  return `<div class="knowledge-pagination">
+    <span>共 ${total} 条 · 第 ${page}/${totalPages} 页</span>
+    <div>
+      <button class="button small" data-knowledge-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>上一页</button>
+      <button class="button small" data-knowledge-page="${page + 1}" ${page >= totalPages ? "disabled" : ""}>下一页</button>
+    </div>
+  </div>`;
+}
+
+function renderKnowledgeDetail(kb) {
+  return `<div class="knowledge-detail">
+    <div class="knowledge-detail-head">
+      <div>
+        <h2>${escapeHtml(kb.name)}</h2>
+        <p>${escapeHtml(kb.description)}</p>
+      </div>
+      <div class="knowledge-detail-actions">
+        <button class="button" title="${escapeHtml(knowledgeActionTitle(kb.enabled ? "停用" : "启用", kb))}" data-knowledge-toggle="${escapeHtml(kb.id)}">${kb.enabled ? "停用" : "启用"}</button>
+        <button class="button" title="${escapeHtml(knowledgeActionTitle("编辑", kb))}" data-knowledge-edit="${escapeHtml(kb.id)}">编辑</button>
+        <button class="button primary" title="${escapeHtml(knowledgeActionTitle("重新索引", kb))}" data-knowledge-reindex="${escapeHtml(kb.id)}">${state.knowledgeActionLoadingId === kb.id ? "索引中" : "重新索引"}</button>
+      </div>
+    </div>
+    <div class="knowledge-detail-stats">
+      <div><span>状态</span>${knowledgeStatusTag(kb.status)}</div>
+      <div><span>Embedding</span>${knowledgeEmbeddingTag(kb.embeddingStatus)}</div>
+      <div><span>更新时间</span><b>${escapeHtml(kb.updatedAt)}</b></div>
+      <div><span>数据量</span><b>${knowledgeFormatCount(kb)}</b></div>
+    </div>
+    <div class="knowledge-detail-section">
+      <h3>文档</h3>
+      ${kb.documents.length ? kb.documents.map(renderKnowledgeDocument).join("") : `<div class="empty">暂无文档</div>`}
+    </div>
+    <div class="knowledge-detail-section">
+      <h3>Chunk 预览</h3>
+      ${renderKnowledgeChunks(kb)}
+    </div>
+  </div>`;
+}
+
+function renderKnowledgeDocument(doc) {
+  return `<div class="knowledge-document-row">
+    <div><b>${escapeHtml(doc.name)}</b><span>${escapeHtml(doc.type)} · ${escapeHtml(doc.size)}</span></div>
+    <div>${knowledgeStatusTag(doc.status)}</div>
+    <div>${escapeHtml(doc.updatedAt)}</div>
+    <div>${doc.chunks.length} Chunk</div>
+  </div>`;
+}
+
+function renderKnowledgeChunks(kb) {
+  const chunks = kb.documents.flatMap((doc) => doc.chunks.map((chunk) => ({ ...chunk, docName: doc.name }))).slice(0, 6);
+  if (!chunks.length) return `<div class="empty">暂无 Chunk</div>`;
+  return chunks
+    .map(
+      (chunk) => `<div class="preview-chunk">
+        <div class="preview-chunk-head"><span>${escapeHtml(chunk.id)}</span><span>${chunk.chars}字符 · ${escapeHtml(chunk.embedding)}</span></div>
+        <div class="subtle">${escapeHtml(chunk.docName)}</div>
+        <div>${escapeHtml(chunk.text)}</div>
+      </div>`
+    )
+    .join("");
+}
+
 function renderKnowledgeCreatePage() {
+  ensureKnowledgeState();
   return `
     <section class="module-layout knowledge-create-shell">
       ${renderAiSubnav("knowledge")}
@@ -43,64 +193,53 @@ function renderKnowledgeCreateStepper() {
 
 function renderKnowledgeCreateContent() {
   if (state.knowledgeCreateStep === 1) return renderContentTypeStep();
-  if (state.knowledgeCreateStep === 2) return renderTextUploadStep();
+  if (state.knowledgeCreateStep === 2) return renderKnowledgeDataStep();
   if (state.knowledgeCreateStep === 3) return renderSegmentStep();
   return renderKnowledgeCompleteStep();
 }
 
 function renderContentTypeStep() {
-  const primary = [
-    ["文本", "文", "手动录入问答、说明、报价规则等文本内容"],
-    ["整个网站", "网", "抓取网站页面并生成可检索知识"],
-    ["文档文件", "档", "上传 PDF、Word、Excel、TXT 等文档"],
-  ];
-  const thirdParty = [
-    ["集简云数据表", "数", "同步表格数据作为知识来源"],
-    ["微信公众号(官方接口)", "微", "通过官方接口同步公众号素材"],
-    ["微信公众号(页面采集)", "微", "采集公开页面内容并清洗入库"],
-    ["飞书文档", "飞", "同步飞书文档内容"],
-  ];
   return `<div class="knowledge-step-content">
     <h3>选择内容类型</h3>
     <div class="knowledge-type-grid">
-      ${primary.map(([title, ico, desc]) => renderKnowledgeTypeCard(title, ico, desc)).join("")}
-    </div>
-    <div class="knowledge-group-title">第三方数据源</div>
-    <div class="knowledge-type-grid">
-      ${thirdParty.map(([title, ico, desc]) => renderKnowledgeTypeCard(title, ico, desc)).join("")}
+      ${knowledgeSupportedSources.map((source) => renderKnowledgeTypeCard(source)).join("")}
     </div>
   </div>`;
 }
 
-function renderKnowledgeTypeCard(title, ico, desc) {
-  const active = state.knowledgeCreateType === title;
-  return `<div class="knowledge-type-card ${active ? "active" : ""}" data-knowledge-type="${title}">
-    <span class="knowledge-source-icon">${ico}</span>
+function renderKnowledgeTypeCard(source) {
+  const active = state.knowledgeCreateType === source.id;
+  return `<div class="knowledge-type-card ${active ? "active" : ""}" data-knowledge-type="${escapeHtml(source.id)}">
+    <span class="knowledge-source-icon">${escapeHtml(source.icon)}</span>
     <div>
-      <b>${title}</b>
-      <div class="subtle">${desc}</div>
+      <b>${escapeHtml(source.label)}</b>
+      <div class="subtle">${escapeHtml(source.description)}</div>
     </div>
   </div>`;
+}
+
+function renderKnowledgeDataStep() {
+  if (state.knowledgeCreateType === "website") return renderWebsiteUploadStep();
+  if (state.knowledgeCreateType === "text") return renderTextUploadStep();
+  return renderFileUploadStep();
 }
 
 function renderTextUploadStep() {
-  if (state.knowledgeCreateType === "整个网站") return renderWebsiteUploadStep();
-  if (state.knowledgeCreateType === "文档文件") return renderFileUploadStep();
   return `<div class="knowledge-form-panel">
     <div class="form-row">
       <div class="label">文本名称 <span style="color:var(--red)">*</span></div>
-      <input class="input" style="width:100%" placeholder="请输入" value="欧洲海运物流问答">
+      <input class="input" style="width:100%" placeholder="请输入" value="${escapeHtml(state.knowledgeCreateDraft.name || "物流售后 FAQ")}" data-knowledge-draft="name">
     </div>
     <div class="form-row">
       <div class="label">文本来源</div>
-      <input class="input" style="width:100%" placeholder="请输入" value="物流问答库">
+      <input class="input" style="width:100%" placeholder="请输入" value="${escapeHtml(state.knowledgeCreateDraft.description || "人工整理文本")}" data-knowledge-draft="description">
     </div>
     <div class="form-row">
       <div class="label">文本内容 <span style="color:var(--red)">*</span></div>
       <div class="editor-toolbar kb-toolbar">
         <b>H</b><b>B</b><i>I</i><span>S</span><span>•</span><span>1.</span><span>≡</span><span>🔗</span><span>▧</span><span>▦</span><span>⌄</span><span>↶</span><span>↷</span>
       </div>
-      <div class="rich-editor kb-editor" contenteditable="true">促销-欧洲海运普船(卡派)的派送时效为开船后45天左右。
+      <div class="rich-editor kb-editor" contenteditable="true" data-knowledge-text>促销-欧洲海运普船(卡派)的派送时效为开船后45天左右。
 
 欧洲海运包税线路：深圳装柜 → 盐田港 → 鹿特丹港落港 → 荷兰/比利时清关 → 再通过快递或卡车派送至欧洲仓库或商业地址。
 
@@ -114,38 +253,51 @@ function renderWebsiteUploadStep() {
     <div class="blue-tip">我们会自动收集网站中的页面列表和页面文本内容，页面最大数量不超过500个</div>
     <div class="form-row">
       <div class="label">网站名称</div>
-      <input class="input" style="width:100%" placeholder="请输入" value="">
+      <input class="input" style="width:100%" placeholder="请输入" value="${escapeHtml(state.knowledgeCreateDraft.name || "官网帮助中心")}" data-knowledge-draft="name">
     </div>
     <div class="form-row">
       <div class="label">网站链接 <span style="color:var(--red)">*</span></div>
-      <textarea class="textarea website-textarea" style="width:100%" placeholder="请输入网页链接，每个网页链接必须单独一行"></textarea>
+      <textarea class="textarea website-textarea" style="width:100%" placeholder="请输入网页链接，每个网页链接必须单独一行" data-knowledge-draft="description">https://example.com</textarea>
       <div class="hint">请包含完整的网站地址，包括http开头，例如：https://jijyun.cn</div>
     </div>
     <div class="or-line"><span>或</span></div>
     <div class="form-row">
-      <div class="label">网站地图(SiteMap) <span style="color:var(--red)">*</span></div>
-      <input class="input" style="width:100%" placeholder="请输入">
-      <div class="hint">请在此处填写网站地图的完整地址，示例：https://www.abc.com/site.xml</div>
+      <div class="label">网站地图(SiteMap)</div>
+      <input class="input" style="width:100%" placeholder="请输入" value="https://example.com/sitemap.xml">
+      <div class="hint">系统会采集页面文本，保存来源地址，并按当前规则生成索引。</div>
     </div>
     <div class="form-row inline-row">
       <div>
         <div class="label">支持动态页面内容获取</div>
         <div class="hint">动态页面获取需要使用额外的内容获取工具，有额外费用</div>
       </div>
-      <span class="switch" data-switch></span>
+      <span class="switch" data-switch data-knowledge-dynamic></span>
     </div>
   </div>`;
 }
 
 function renderFileUploadStep() {
+  const source = knowledgeSourceById(state.knowledgeCreateType);
   return `<div class="knowledge-form-panel">
-    <div class="upload-drop knowledge-file-drop" data-knowledge-file-upload>
-      <b>将文件拖拽至此区域或 <span>选择文件上传</span></b>
-      <p>仅支持：EXCEL, PDF, DOCX, PPTX, JSON, CSV, EPUB, MD, MBOX, EML, HTML, TXT,<br>
-      DOT, WPS, WPT, DOCM, DOTM, POTX, PPS, PPSX, DPS, DPT, PPTM, POTM, PPSM, XLT,<br>
-      ET, ETT, XLSM, XLTM, LRC, C, CPP, H, ASM, S, JAVA, BAT, BAS, PRG, CMD格式。导入的数据<br>
-      摘要单个大小20MB以内，EXCEL、CSV单个大小5M以内。</p>
+    <div class="upload-drop knowledge-file-drop ${state.knowledgeUpload?.status === "失败" ? "error" : ""}" title="点击或拖拽文件到此处上传" data-knowledge-file-upload>
+      <b>将 ${escapeHtml(source.label)} 文件拖拽至此区域或 <span>选择文件上传</span></b>
+      <p>支持 PDF、Word、Excel、TXT、CSV、JSON、Markdown 和 HTML 文件，并展示上传进度、状态和失败提示。</p>
     </div>
+    <input class="knowledge-hidden-file" type="file" data-knowledge-file-input accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.json,.md,.html">
+    ${renderKnowledgeUploadState()}
+  </div>`;
+}
+
+function renderKnowledgeUploadState() {
+  const upload = state.knowledgeUpload;
+  if (!upload) return `<div class="hint">当前未选择文件。点击或拖拽文件到上传区域。</div>`;
+  return `<div class="knowledge-upload-state">
+    <div class="knowledge-upload-row">
+      <div><b>${escapeHtml(upload.name)}</b><span>${escapeHtml(upload.status)}</span></div>
+      <b>${upload.progress}%</b>
+    </div>
+    <div class="knowledge-progress"><span style="width:${upload.progress}%"></span></div>
+    ${upload.error ? `<div class="knowledge-upload-error">${escapeHtml(upload.error)}</div>` : ""}
   </div>`;
 }
 
@@ -162,14 +314,14 @@ function renderSegmentStep() {
   return `<div class="segment-layout knowledge-vector-layout">
     <div class="segment-main">
       <div class="knowledge-vector-intro">
-        <h3>表格文件向量化方式选择</h3>
-        <p>选择表格文件处理方式：如果您的表格文件内容包含合并单元格等形式的内容，可选择“分段向量”方式。您的表格文件内容是逐行录入，例如问题在A列，回答在B列可选择“逐行向量”方式，
+        <h3>分段与清洗设置</h3>
+        <p>支持自动分段、自定义分段和逐行向量。系统会按当前参数生成 Chunk 预览，并在确认后保存分段和清洗规则。
           <a href="./assets/templates/knowledge-row-vector-template.xlsx" download="知识库文件导入模板.xlsx" data-template-download>下载"逐行向量"示例文件</a>
         </p>
       </div>
       <div class="knowledge-file-meta">
-        <span class="excel-file-icon">X</span>
-        <div><b>物流问答库.xlsx</b><small>0.01M</small></div>
+        <span class="excel-file-icon">K</span>
+        <div><b>${escapeHtml(state.knowledgeUpload?.name || state.knowledgeCreateDraft.name || "物流问答库.xlsx")}</b><small>${escapeHtml(state.knowledgeUpload?.size || "0.01M")}</small></div>
         <label class="vector-radio"><input type="radio" name="knowledge-vector" data-vector-mode="row" ${state.knowledgeVectorMode === "row" ? "checked" : ""}> 逐行向量</label>
         <label class="vector-radio"><input type="radio" name="knowledge-vector" data-vector-mode="segment" ${state.knowledgeVectorMode === "segment" ? "checked" : ""}> 分段向量</label>
       </div>
@@ -189,7 +341,7 @@ function renderSegmentStep() {
     </div>
     <aside class="preview-pane">
       <h3>分段预览</h3>
-      ${renderSegmentPreview(custom)}
+      ${renderSegmentPreview(custom || state.knowledgePreview || state.knowledgeVectorMode === "row")}
     </aside>
   </div>`;
 }
@@ -216,7 +368,7 @@ function renderCustomSegmentSettings() {
     </div>
     <div class="label">文本预处理规则</div>
     <div class="rule-list">
-      ${rules.map((rule, index) => `<label><input type="checkbox" ${index === 0 ? "checked" : ""}> ${rule}</label>`).join("")}
+      ${rules.map((rule, index) => `<label><input type="checkbox" ${index === 0 ? "checked" : ""}> ${escapeHtml(rule)}</label>`).join("")}
     </div>
     <div class="segment-actions">
       <button class="button" data-reset-segment>重置</button>
@@ -225,25 +377,31 @@ function renderCustomSegmentSettings() {
   </div>`;
 }
 
-function renderSegmentPreview(custom) {
-  if (!custom) return "";
-  const chunks = state.knowledgePreview ? knowledgePreviewChunks : knowledgePreviewChunks;
-  return chunks
+function renderSegmentPreview(visible) {
+  if (!visible) return `<div class="empty preview-empty">选择分段方式后生成 Chunk 预览</div>`;
+  return knowledgePreviewChunks
     .map(
       ([id, count, text]) => `<div class="preview-chunk">
         <div class="preview-chunk-head"><span>${id}</span><span>${count}</span></div>
-        <div>${text}</div>
+        <div>${escapeHtml(text)}</div>
       </div>`
     )
     .join("");
 }
 
 function renderKnowledgeCompleteStep() {
+  const source = knowledgeSourceById(state.knowledgeCreateType);
   return `<div class="knowledge-complete">
+    <span class="complete-icon">✓</span>
     <h3>知识库创建完成</h3>
     <div class="form-row" style="width:100%">
       <div class="label">知识库名称 <span style="color:var(--red)">*</span></div>
-      <input class="input" style="width:100%" placeholder="请输入知识库名称" value="物流问答">
+      <input class="input" style="width:100%" placeholder="请输入知识库名称" value="${escapeHtml(state.knowledgeCreateDraft.name || `${source.label}知识库`)}" data-knowledge-final-name>
+    </div>
+    <div class="complete-summary">
+      <div><span>来源</span><b>${escapeHtml(source.label)}</b></div>
+      <div><span>分段</span><b>${state.knowledgeSegmentMode === "custom" ? "自定义" : state.knowledgeVectorMode === "row" ? "逐行" : "自动"}</b></div>
+      <div><span>Embedding</span><b>已完成</b></div>
     </div>
   </div>`;
 }

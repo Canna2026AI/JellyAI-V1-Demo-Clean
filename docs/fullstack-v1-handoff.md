@@ -27,9 +27,14 @@
    ```bash
    npm run db:seed
    ```
-6. Start dev server:
+6. Start both local sites:
    ```bash
    npm run dev
+   ```
+   This starts the admin/API site and the customer front site together. For single-site debugging:
+   ```bash
+   npm run dev:admin
+   npm run dev:front
    ```
 
 ## Demo Accounts
@@ -39,27 +44,28 @@
 
 ## URLs
 
-- Login: `http://localhost:3000/login`
-- Admin: `http://localhost:3000/admin`
-- Customer overview: `http://localhost:3000/app`
-- Customer workspace: `http://localhost:3000/app/workspace?module=conversations`
-- Static workspace asset: `http://localhost:3000/workspace/index.html?module=conversations`
+- Admin/API login: `http://localhost:3000/login`
+- Admin console: `http://localhost:3000/admin`
+- Customer front login: `http://127.0.0.1:3001/login`
+- Customer front workspace: `http://127.0.0.1:3001/?module=conversations`
+- Compatibility redirects: `http://localhost:3000/app` and `http://localhost:3000/app/workspace?module=conversations` redirect to the customer front site.
 
 ## Integrated Capabilities
 
 - Admin/auth/database/multi-tenant foundation from `feature/fullstack-admin-auth`.
-- Aggregated conversations from `feature/conversations`: front-end module preserved, local conversations/messages API added, send writes to DB and token usage.
-- AI agents from `feature/agents`: front-end list preserved, agents API/table added, seeded logistics assistant.
-- Channels from `feature/channels`: channel catalog preserved, channels API/table added, front-end reads local API data.
-- WeCom hosting from `feature/wecom`: WeCom management UI preserved, local `wecom_accounts` API/table added, status updates supported through API.
-- Knowledge base from `feature/knowledge`: knowledge UI preserved, `knowledge_bases` API/table added, local create/list supported.
+- Aggregated conversations from `feature/conversations`: latest front-end module/service assets re-applied, local conversations/messages API connected, send writes to DB and token usage.
+- AI agents from `feature/agents`: latest front-end module/service assets re-applied, agents API/table connected for list/detail/create/update, seeded logistics assistant.
+- Channels from `feature/channels`: latest channel catalog/service/UI re-applied, channels API/table connected for list, local mock account saves for missing account CRUD.
+- WeCom hosting from `feature/wecom`: latest management UI/service assets re-applied, local `wecom_accounts` API/table connected for account list/status/settings patch, richer RPA state remains mock.
+- Knowledge base from `feature/knowledge`: latest knowledge UI/service assets re-applied, `knowledge_bases` API/table connected for list/create, upload/vector/index operations remain mock.
 
 ## Real Local Data
 
 - Login/session is real and backed by `users` + `sessions`.
 - Admin customer/model/token pages are real and backed by Postgres.
-- Customer workspace is protected by tenant session.
-- Five core modules call same-origin local APIs through `services/fullstackApi.js`.
+- Admin/API and customer front are separate local sites: `localhost:3000` for Next admin/API, `127.0.0.1:3001` for the customer front static site.
+- Customer front is protected by the tenant session through the customer-web proxy.
+- Five core modules call local APIs through dedicated feature service adapters; `services/fullstackApi.js` is now only a bootstrap/API health probe and no longer rewrites module data.
 - Conversation message sending writes `messages`, updates `conversations`, and records token usage.
 - Seed creates one demo tenant, one tenant user, model config, token usage, channels, WeCom account, agent, knowledge base, conversation, and messages.
 
@@ -107,15 +113,14 @@ Compatibility tables retained from the foundation:
 ## Verification Snapshot
 
 - `npm install`: passed
-- `npm run lint`: passed
+- `npm run lint`: passed with no warnings
 - `npm run build`: passed
-- `npm run db:migrate`: passed after adapting to legacy `knowledge_bases`
+- `npm run db:migrate`: passed; existing-table PostgreSQL notices are expected on an already-initialized local DB
 - `npm run db:seed`: passed
-- Table count smoke test: all minimum tables exist and have seed coverage
-- `npm run dev`: passed at `http://localhost:3000`
-- Browser admin login: passed, `/admin` shows customers, models, token usage, and audit logs
-- Browser tenant login: passed, `/app/workspace?module=conversations` opens the customer workspace
-- Browser module check: passed for conversations, agents, channels, WeCom, and knowledge
-- Browser conversation send: passed, message persisted through local API and displayed token usage
-- App console check: no localhost-sourced fatal JS errors; one browser-environment `MutationObserver` error without localhost URL was observed and is not from repo code
-- API smoke test: admin and tenant auth plus core V1 endpoints returned HTTP 200
+- Minimum table smoke test: all required tables exist; seeded/local counts include organizations 1, users 2, customers 2, model_configs 3, token_usage 5, channels 2, wecom_accounts 1, agents 1, knowledge_bases 1, conversations 1, messages 10, audit_logs 17
+- `npm run dev`: passed; admin/API at `http://localhost:3000`, customer front at `http://127.0.0.1:3001`
+- Browser admin login: passed; `/admin`, `/admin/customers`, `/admin/models`, and `/admin/system` opened and showed admin shell/content
+- Browser tenant login: passed; `http://127.0.0.1:3001/login` redirected to `http://127.0.0.1:3001/?module=conversations`
+- Browser module check: passed for conversations, agents, channels, WeCom, and knowledge on the customer front site
+- Browser console check: no localhost/127.0.0.1 sourced error/warn entries
+- API smoke test: passed for admin login, tenant login through customer-web proxy, bootstrap, channels, WeCom accounts, agents, knowledge bases, conversations, and conversation message send

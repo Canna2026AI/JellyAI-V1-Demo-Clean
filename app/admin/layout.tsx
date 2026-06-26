@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/auth/session";
 import { LogoutButton } from "@/components/LogoutButton";
+import { getCustomerWebUrl } from "@/lib/urls";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requirePlatformAdmin();
+  const customerWebUrl = getCustomerWebUrl("/");
 
   return (
     <div className="admin-shell">
@@ -19,7 +21,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/customers">客户管理</Link>
           <Link href="/admin/models">模型与 Token</Link>
           <Link href="/admin/system">系统配置</Link>
-          <Link href="/app">客户前台</Link>
+          <a href={customerWebUrl}>客户前台</a>
         </nav>
         <div className="muted">
           <div>{user.displayName}</div>
