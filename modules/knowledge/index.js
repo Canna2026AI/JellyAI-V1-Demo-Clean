@@ -58,7 +58,24 @@ const knowledgeRuntime = {
     const source = knowledgeSourceById(draft.sourceType || "text");
     const name = (draft.name || `${source.label}知识库`).trim();
     const documentName = draft.documentName || draft.uploadName || `${name}.${source.id === "website" ? "url" : source.id}`;
-    const chunks = knowledgeDefaultChunks(source.label, documentName);
+    const chunks = Array.isArray(draft.chunks) && draft.chunks.length ? draft.chunks : knowledgeDefaultChunks(source.label, documentName);
+    const documents = Array.isArray(draft.documents) && draft.documents.length
+      ? draft.documents.map((doc) => ({
+          ...doc,
+          chunks: Array.isArray(doc.chunks) && doc.chunks.length ? doc.chunks : chunks,
+          updatedAt: doc.updatedAt || knowledgeNow(),
+        }))
+      : [
+          {
+            id: `doc-${Date.now()}`,
+            name: documentName,
+            type: source.label,
+            status: "已完成",
+            size: draft.size || "20KB",
+            updatedAt: knowledgeNow(),
+            chunks,
+          },
+        ];
     const kb = {
       id: `kb-${Date.now()}`,
       name,
@@ -67,24 +84,14 @@ const knowledgeRuntime = {
       sourceType: source.label,
       status: "启用",
       enabled: true,
-      documentCount: 1,
+      documentCount: draft.documentCount || documents.length,
       chunkCount: chunks.length,
       embeddingStatus: "已完成",
       size: draft.size || "20KB",
       updatedAt: knowledgeNow(),
       createdAt: knowledgeNow(),
       icon: source.icon,
-      documents: [
-        {
-          id: `doc-${Date.now()}`,
-          name: documentName,
-          type: source.label,
-          status: "已完成",
-          size: draft.size || "20KB",
-          updatedAt: knowledgeNow(),
-          chunks,
-        },
-      ],
+      documents,
     };
     knowledgeBases.unshift(kb);
     return kb;

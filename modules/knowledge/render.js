@@ -199,10 +199,16 @@ function renderKnowledgeCreateContent() {
 }
 
 function renderContentTypeStep() {
+  const coreSources = knowledgeSupportedSources.filter((source) => source.group !== "thirdParty");
+  const thirdPartySources = knowledgeSupportedSources.filter((source) => source.group === "thirdParty");
   return `<div class="knowledge-step-content">
     <h3>选择内容类型</h3>
     <div class="knowledge-type-grid">
-      ${knowledgeSupportedSources.map((source) => renderKnowledgeTypeCard(source)).join("")}
+      ${coreSources.map((source) => renderKnowledgeTypeCard(source)).join("")}
+    </div>
+    <div class="knowledge-group-title">第三方数据源</div>
+    <div class="knowledge-type-grid">
+      ${thirdPartySources.map((source) => renderKnowledgeTypeCard(source)).join("")}
     </div>
   </div>`;
 }
@@ -250,14 +256,14 @@ function renderTextUploadStep() {
 
 function renderWebsiteUploadStep() {
   return `<div class="knowledge-form-panel website-form-panel">
-    <div class="blue-tip">我们会自动收集网站中的页面列表和页面文本内容，页面最大数量不超过500个</div>
+    <div class="blue-tip">本地版本会保存页面来源并尝试抽取可访问页面文本，后端采集器接入后可批量抓取正文</div>
     <div class="form-row">
       <div class="label">网站名称</div>
       <input class="input" style="width:100%" placeholder="请输入" value="${escapeHtml(state.knowledgeCreateDraft.name || "官网帮助中心")}" data-knowledge-draft="name">
     </div>
     <div class="form-row">
       <div class="label">网站链接 <span style="color:var(--red)">*</span></div>
-      <textarea class="textarea website-textarea" style="width:100%" placeholder="请输入网页链接，每个网页链接必须单独一行" data-knowledge-draft="description">https://example.com</textarea>
+      <textarea class="textarea website-textarea" style="width:100%" placeholder="请输入网页链接，每个网页链接必须单独一行" data-knowledge-draft="description">${escapeHtml(state.knowledgeCreateDraft.description || "https://example.com")}</textarea>
       <div class="hint">请包含完整的网站地址，包括http开头，例如：https://jijyun.cn</div>
     </div>
     <div class="or-line"><span>或</span></div>
@@ -281,9 +287,9 @@ function renderFileUploadStep() {
   return `<div class="knowledge-form-panel">
     <div class="upload-drop knowledge-file-drop ${state.knowledgeUpload?.status === "失败" ? "error" : ""}" title="点击或拖拽文件到此处上传" data-knowledge-file-upload>
       <b>将 ${escapeHtml(source.label)} 文件拖拽至此区域或 <span>选择文件上传</span></b>
-      <p>支持 PDF、Word、Excel、TXT、CSV、JSON、Markdown 和 HTML 文件，并展示上传进度、状态和失败提示。</p>
+      <p>${escapeHtml(source.description)}。上传后会立即清洗、拆分并生成 Chunk 预览。</p>
     </div>
-    <input class="knowledge-hidden-file" type="file" data-knowledge-file-input accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.json,.md,.html">
+    <input class="knowledge-hidden-file" type="file" data-knowledge-file-input accept="${escapeHtml(source.accept || ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.tsv,.json,.md,.markdown,.html,.htm,.xml,.eml,.mbox")}">
     ${renderKnowledgeUploadState()}
   </div>`;
 }
@@ -297,20 +303,31 @@ function renderKnowledgeUploadState() {
       <b>${upload.progress}%</b>
     </div>
     <div class="knowledge-progress"><span style="width:${upload.progress}%"></span></div>
+    ${upload.analysis ? renderKnowledgeAnalysisSummary(upload.analysis) : ""}
     ${upload.error ? `<div class="knowledge-upload-error">${escapeHtml(upload.error)}</div>` : ""}
   </div>`;
 }
 
-const knowledgePreviewChunks = [
-  ["#001", "72字符", "问题: 什么是物流?　答案: 物流是指物品从供应地到接收地的实体流动过程，包括运输、储存、装卸、搬运、包装、流通加工、配送、信息处理等基本功能。"],
-  ["#002", "51字符", "问题: 下单渠道：倔强青铜-欧海经济BS-DD，注意事项　答案: 单件计费重不足12KG按12KG计算"],
-  ["#003", "16字符", "一票一件额外加收100RMB/票"],
-  ["#004", "49字符", "重货优惠1:200减0.2 1:250减0.5 1:330减1 单票计费重小于200KG无优惠"],
-  ["#005", "49字符", "问题: 欧洲海运包税运行线路　答案: 深圳装柜-盐田-鹿特丹落港-荷兰/比利时清关-快递/卡车派送"],
-];
+function renderKnowledgeAnalysisSummary(analysis) {
+  return `<div class="knowledge-analysis-summary">
+    <div><span>Chunk</span><b>${Number(analysis.chunkCount || 0).toLocaleString("zh-CN")}</b></div>
+    <div><span>清洗字符</span><b>${Number(analysis.cleanedChars || 0).toLocaleString("zh-CN")}</b></div>
+    <div><span>向量方式</span><b>${analysis.vectorMode === "row" ? "逐行" : "分段"}</b></div>
+    ${analysis.rows ? `<div><span>行数</span><b>${Number(analysis.rows).toLocaleString("zh-CN")}</b></div>` : ""}
+    ${analysis.warnings?.length ? `<p>${analysis.warnings.map((item) => escapeHtml(item)).join("；")}</p>` : ""}
+  </div>`;
+}
+
+function getKnowledgeCreateChunks() {
+  return state.knowledgeCreateDraft?.chunks || state.knowledgeUpload?.chunks || state.knowledgeUpload?.analysis?.chunks || [];
+}
 
 function renderSegmentStep() {
   const custom = state.knowledgeSegmentMode === "custom";
+  const source = knowledgeSourceById(state.knowledgeCreateType);
+  const analysis = state.knowledgeCreateDraft?.analysis || state.knowledgeUpload?.analysis || null;
+  const documentName = state.knowledgeCreateDraft?.documentName || state.knowledgeUpload?.name || state.knowledgeCreateDraft?.name || `${source.label}知识来源`;
+  const sizeText = state.knowledgeCreateDraft?.size || state.knowledgeUpload?.size || `${Math.max(1, Math.round((analysis?.cleanedChars || 0) / 1024))}KB`;
   return `<div class="segment-layout knowledge-vector-layout">
     <div class="segment-main">
       <div class="knowledge-vector-intro">
@@ -320,8 +337,8 @@ function renderSegmentStep() {
         </p>
       </div>
       <div class="knowledge-file-meta">
-        <span class="excel-file-icon">K</span>
-        <div><b>${escapeHtml(state.knowledgeUpload?.name || state.knowledgeCreateDraft.name || "物流问答库.xlsx")}</b><small>${escapeHtml(state.knowledgeUpload?.size || "0.01M")}</small></div>
+        <span class="excel-file-icon">${escapeHtml(source.icon)}</span>
+        <div><b>${escapeHtml(documentName)}</b><small>${escapeHtml(sizeText)}${analysis?.summary ? ` · ${escapeHtml(analysis.summary)}` : ""}</small></div>
         <label class="vector-radio"><input type="radio" name="knowledge-vector" data-vector-mode="row" ${state.knowledgeVectorMode === "row" ? "checked" : ""}> 逐行向量</label>
         <label class="vector-radio"><input type="radio" name="knowledge-vector" data-vector-mode="segment" ${state.knowledgeVectorMode === "segment" ? "checked" : ""}> 分段向量</label>
       </div>
@@ -378,12 +395,15 @@ function renderCustomSegmentSettings() {
 }
 
 function renderSegmentPreview(visible) {
+  const chunks = getKnowledgeCreateChunks();
   if (!visible) return `<div class="empty preview-empty">选择分段方式后生成 Chunk 预览</div>`;
-  return knowledgePreviewChunks
+  if (!chunks.length) return `<div class="empty preview-empty">暂无可预览 Chunk，请先完成上传或文本录入。</div>`;
+  return chunks
+    .slice(0, 10)
     .map(
-      ([id, count, text]) => `<div class="preview-chunk">
-        <div class="preview-chunk-head"><span>${id}</span><span>${count}</span></div>
-        <div>${escapeHtml(text)}</div>
+      (chunk) => `<div class="preview-chunk">
+        <div class="preview-chunk-head"><span>${escapeHtml(chunk.id)}</span><span>${Number(chunk.chars || chunk.text?.length || 0).toLocaleString("zh-CN")}字符</span></div>
+        <div>${escapeHtml(chunk.text || "")}</div>
       </div>`
     )
     .join("");
@@ -391,6 +411,7 @@ function renderSegmentPreview(visible) {
 
 function renderKnowledgeCompleteStep() {
   const source = knowledgeSourceById(state.knowledgeCreateType);
+  const analysis = state.knowledgeCreateDraft?.analysis || state.knowledgeUpload?.analysis || {};
   return `<div class="knowledge-complete">
     <span class="complete-icon">✓</span>
     <h3>知识库创建完成</h3>
@@ -401,7 +422,10 @@ function renderKnowledgeCompleteStep() {
     <div class="complete-summary">
       <div><span>来源</span><b>${escapeHtml(source.label)}</b></div>
       <div><span>分段</span><b>${state.knowledgeSegmentMode === "custom" ? "自定义" : state.knowledgeVectorMode === "row" ? "逐行" : "自动"}</b></div>
+      <div><span>Chunk</span><b>${Number(analysis.chunkCount || state.knowledgeCreateDraft?.chunkCount || 0).toLocaleString("zh-CN")}</b></div>
+      <div><span>清洗字符</span><b>${Number(analysis.cleanedChars || 0).toLocaleString("zh-CN")}</b></div>
       <div><span>Embedding</span><b>已完成</b></div>
     </div>
+    ${analysis.warnings?.length ? `<div class="knowledge-complete-warning">${analysis.warnings.map((item) => escapeHtml(item)).join("；")}</div>` : ""}
   </div>`;
 }

@@ -1,13 +1,53 @@
 // Mock knowledge base data.
 
 const knowledgeSupportedSources = [
-  { id: "text", label: "文本", icon: "文", description: "手动录入 FAQ、报价规则、售后说明等文本内容" },
-  { id: "website", label: "网站", icon: "网", description: "采集网站页面并清洗为可检索知识" },
-  { id: "pdf", label: "PDF", icon: "P", description: "上传 PDF 文件并解析正文、表格和页码" },
-  { id: "word", label: "Word", icon: "W", description: "上传 DOC / DOCX 文档并按段落切分" },
-  { id: "excel", label: "Excel", icon: "X", description: "上传 XLS / XLSX 表格并支持逐行向量" },
-  { id: "txt", label: "TXT", icon: "T", description: "上传纯文本文件并自动清洗空行" },
-  { id: "csv", label: "CSV", icon: "C", description: "上传 CSV 表格并按行生成问答或知识片段" },
+  { id: "text", group: "core", label: "文本", icon: "文", description: "手动录入问答、说明、报价规则等文本内容", defaultVectorMode: "segment" },
+  { id: "website", group: "core", label: "整个网站", icon: "网", description: "抓取网站页面并生成可检索知识", defaultVectorMode: "segment" },
+  {
+    id: "document",
+    group: "core",
+    label: "文档文件",
+    icon: "档",
+    description: "上传 PDF、Word、Excel、TXT 等文档",
+    accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.tsv,.json,.md,.markdown,.html,.htm,.xml,.eml,.mbox",
+    defaultVectorMode: "segment",
+  },
+  {
+    id: "jijyun_table",
+    group: "thirdParty",
+    label: "集简云数据表",
+    icon: "数",
+    description: "同步表格数据作为知识来源",
+    accept: ".csv,.tsv,.xls,.xlsx,.json,.txt",
+    defaultVectorMode: "row",
+  },
+  {
+    id: "wechat_official",
+    group: "thirdParty",
+    label: "微信公众号(官方接口)",
+    icon: "微",
+    description: "通过官方接口同步公众号素材",
+    accept: ".json,.csv,.html,.htm,.txt,.md,.markdown",
+    defaultVectorMode: "segment",
+  },
+  {
+    id: "wechat_page",
+    group: "thirdParty",
+    label: "微信公众号(页面采集)",
+    icon: "微",
+    description: "采集公开页面内容并清洗入库",
+    accept: ".html,.htm,.txt,.md,.markdown,.json,.csv",
+    defaultVectorMode: "segment",
+  },
+  {
+    id: "feishu",
+    group: "thirdParty",
+    label: "飞书文档",
+    icon: "飞",
+    description: "同步飞书文档内容",
+    accept: ".docx,.xlsx,.csv,.json,.md,.markdown,.html,.htm,.txt",
+    defaultVectorMode: "segment",
+  },
 ];
 
 const knowledgeStatusOptions = ["全部状态", "启用", "停用", "索引中", "失败"];

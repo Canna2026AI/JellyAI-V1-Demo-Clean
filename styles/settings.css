@@ -11,6 +11,7 @@
 
 .chat-app-shell .main {
   overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .conv-main.help-mode {

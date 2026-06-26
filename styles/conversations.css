@@ -4,6 +4,9 @@
   display: grid;
   grid-template-columns: 132px 250px 1fr 300px;
   height: calc(100vh - 52px);
+  max-height: calc(100vh - 52px);
+  min-height: 0;
+  overflow: hidden;
   background: #fff;
 }
 
@@ -46,6 +49,7 @@
 .conv-list,
 .conv-info {
   border-right: 1px solid var(--line);
+  min-height: 0;
   overflow: auto;
 }
 
@@ -1074,6 +1078,8 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .conv-main.help-mode {
@@ -1086,6 +1092,7 @@
 
 .conv-head {
   height: 48px;
+  flex: 0 0 auto;
   background: #fff;
   border-bottom: 1px solid var(--line);
   display: flex;
@@ -1107,11 +1114,15 @@
 
 .conv-messages {
   flex: 1;
-  overflow: auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
   padding: 18px;
 }
 
 .ai-reply-bar {
+  flex: 0 0 auto;
   min-height: 46px;
   margin: 0 12px 8px;
   padding: 8px 10px;
@@ -1155,6 +1166,7 @@
 }
 
 .conv-quick-strip {
+  flex: 0 0 auto;
   min-height: 38px;
   padding: 6px 10px;
   border-top: 1px solid var(--line);
@@ -1183,6 +1195,7 @@
 }
 
 .conv-compose {
+  flex: 0 0 auto;
   height: 128px;
   background: #fff;
   border-top: 1px solid var(--line);

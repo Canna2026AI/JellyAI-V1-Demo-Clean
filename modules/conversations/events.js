@@ -1,6 +1,10 @@
 // Aggregated conversation page and modal events.
 
 function bindConversationEvents() {
+  if (typeof window !== "undefined" && !window.__jellyConversationLinkDelegationBound) {
+    window.__jellyConversationLinkDelegationBound = true;
+    document.addEventListener("click", handleConversationLinkClick, true);
+  }
   document.querySelector("[data-agent-status-toggle]")?.addEventListener("click", (event) => {
     event.stopPropagation();
     setState({ agentStatusOpen: !state.agentStatusOpen });
@@ -229,13 +233,29 @@ function bindConversationListEvents() {
   document.querySelector("[data-chat-status-filter]")?.addEventListener("change", (event) => setState({ chatStatusFilter: event.target.value, selectedConversation: null, chatLoading: false }));
   document.querySelector("[data-chat-channel-filter]")?.addEventListener("change", (event) => setState({ chatChannelFilter: event.target.value, selectedConversation: null, chatLoading: false }));
   document.querySelectorAll("[data-conversation]").forEach((el) =>
-    el.addEventListener("click", () => {
-      markConversationRead(el.dataset.conversation);
-      setState({ selectedConversation: el.dataset.conversation, chatLoading: false, chatSortOpen: false, chatSearchModeOpen: false });
-    })
+    el.addEventListener("click", handleConversationLinkClick)
   );
   document.querySelector("[data-hide-channel-promo]")?.addEventListener("click", (event) => {
     event.currentTarget.closest(".join-card")?.remove();
+  });
+}
+
+function handleConversationLinkClick(event) {
+  const link = event.target?.closest?.("[data-conversation]");
+  if (!link) return;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const conversationId = link.dataset.conversation;
+  if (!conversationId) return;
+  if (typeof syncLocationForPage === "function") syncLocationForPage("chat", { conversation: conversationId });
+  markConversationRead(conversationId);
+  setState({
+    selectedConversation: conversationId,
+    selectedConversationMember: null,
+    chatLoading: false,
+    chatSortOpen: false,
+    chatSearchModeOpen: false,
   });
 }
 

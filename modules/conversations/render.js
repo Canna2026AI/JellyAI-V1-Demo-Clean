@@ -1,6 +1,7 @@
 // Aggregated conversation module renderers.
 
 function renderChatWorkplace() {
+  syncConversationSelectionFromLocation();
   const visibleConversations = getFilteredConversations();
   const selectedConversation = getSelectedConversation();
   const hasSelected = !!selectedConversation;

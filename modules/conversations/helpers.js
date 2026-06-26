@@ -309,7 +309,13 @@ function saveQuickMessageData() {
 
 function loadConversationData() {
   const saved = readJsonStorage(conversationStorageKey, null);
-  return Array.isArray(saved) && saved.length ? saved : structuredClone(defaultConversationData);
+  if (!Array.isArray(saved) || !saved.length) return structuredClone(defaultConversationData);
+  const merged = new Map();
+  [...saved, ...defaultConversationData].forEach((conversation) => {
+    if (!conversation?.id || merged.has(conversation.id)) return;
+    merged.set(conversation.id, conversation);
+  });
+  return structuredClone([...merged.values()]);
 }
 
 function saveConversationData(options = {}) {
@@ -388,7 +394,7 @@ async function initConversationBackendState() {
 function applyConversationBackendState(backendState) {
   replaceArray(customConversationViews, Array.isArray(backendState.customViews) ? backendState.customViews : customConversationViews);
   replaceObject(quickMessageData, backendState.quickMessages || quickMessageData);
-  replaceArray(conversationData, Array.isArray(backendState.conversations) ? backendState.conversations : conversationData);
+  replaceArray(conversationData, mergeConversationSources(Array.isArray(backendState.conversations) ? backendState.conversations : []));
   replaceObject(workHoursSettings, backendState.settings?.workHours || workHoursSettings);
   replaceObject(automationSettings, backendState.settings?.automation || automationSettings);
   replaceObject(forwardSettings, backendState.settings?.forwarding || forwardSettings);
@@ -398,6 +404,15 @@ function applyConversationBackendState(backendState) {
   writeJsonStorage(workHoursStorageKey, workHoursSettings);
   writeJsonStorage(automationSettingsStorageKey, automationSettings);
   writeJsonStorage(forwardSettingsStorageKey, forwardSettings);
+}
+
+function mergeConversationSources(backendConversations) {
+  const merged = new Map();
+  [...backendConversations, ...conversationData, ...defaultConversationData].forEach((conversation) => {
+    if (!conversation?.id || merged.has(conversation.id)) return;
+    merged.set(conversation.id, conversation);
+  });
+  return [...merged.values()];
 }
 
 function replaceArray(target, source) {
@@ -444,6 +459,15 @@ function scheduleConversationBackendRefresh() {
 
 function getAllConversations() {
   return conversationData;
+}
+
+function syncConversationSelectionFromLocation() {
+  if (typeof window === "undefined") return;
+  const conversationId = new URLSearchParams(window.location.search).get("conversation");
+  if (!conversationId || state.selectedConversation === conversationId) return;
+  if (!conversationData.some((conversation) => conversation.id === conversationId)) return;
+  state.selectedConversation = conversationId;
+  state.chatLoading = false;
 }
 
 function getSelectedConversation() {

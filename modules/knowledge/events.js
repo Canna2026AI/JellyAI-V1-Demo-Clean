@@ -151,16 +151,17 @@ function bindKnowledgeListEvents() {
 
 function bindKnowledgeCreateEvents() {
   document.querySelectorAll("[data-knowledge-type]").forEach((el) =>
-    el.addEventListener("click", () =>
+    el.addEventListener("click", () => {
+      const source = knowledgeSourceById(el.dataset.knowledgeType);
       setState({
-        knowledgeCreateType: el.dataset.knowledgeType,
-        knowledgeVectorMode: el.dataset.knowledgeType === "excel" || el.dataset.knowledgeType === "csv" ? "row" : "segment",
+        knowledgeCreateType: source.id,
+        knowledgeVectorMode: source.defaultVectorMode || "segment",
         knowledgeSegmentMode: "auto",
         knowledgePreview: false,
         knowledgeUpload: null,
-        knowledgeCreateDraft: { sourceType: el.dataset.knowledgeType },
-      })
-    )
+        knowledgeCreateDraft: { sourceType: source.id },
+      });
+    })
   );
 
   document.querySelectorAll("[data-knowledge-draft]").forEach((el) =>
@@ -188,12 +189,19 @@ function bindKnowledgeCreateEvents() {
     el.addEventListener("click", (event) => {
       if (event.target.closest("input, button, a")) return;
       const mode = el.dataset.segmentMode;
-      setState({ knowledgeSegmentMode: mode, knowledgePreview: mode === "custom" });
+      state.knowledgeSegmentMode = mode;
+      refreshKnowledgeAnalysis(false);
+      setState({ knowledgeSegmentMode: mode, knowledgePreview: mode === "custom" || state.knowledgeCreateStep === 3 });
     })
   );
 
   document.querySelectorAll("[data-vector-mode]").forEach((el) =>
-    el.addEventListener("change", () => setState({ knowledgeVectorMode: el.dataset.vectorMode, knowledgeSegmentMode: "auto", knowledgePreview: true }))
+    el.addEventListener("change", () => {
+      state.knowledgeVectorMode = el.dataset.vectorMode;
+      state.knowledgeSegmentMode = "auto";
+      refreshKnowledgeAnalysis(false);
+      setState({ knowledgeVectorMode: el.dataset.vectorMode, knowledgeSegmentMode: "auto", knowledgePreview: true });
+    })
   );
 
   const knowledgeFileUpload = document.querySelector("[data-knowledge-file-upload]");
@@ -250,6 +258,7 @@ function bindKnowledgeCreateEvents() {
       }
       if (state.knowledgeCreateStep === 2 && !collectKnowledgeCreateDraft()) return;
       if (state.knowledgeCreateStep === 2 && !isKnowledgeUploadReady()) return;
+      if (state.knowledgeCreateStep === 2 && !refreshKnowledgeAnalysis(true)) return;
       if (state.knowledgeCreateStep === 4) {
         const finalName = document.querySelector("[data-knowledge-final-name]")?.value?.trim();
         let kb;
@@ -257,12 +266,21 @@ function bindKnowledgeCreateEvents() {
           kb = await knowledgeRuntime.create({
           ...state.knowledgeCreateDraft,
           sourceType: state.knowledgeCreateType,
+          icon: knowledgeSourceById(state.knowledgeCreateType).icon,
           name: finalName || state.knowledgeCreateDraft.name,
           uploadName: state.knowledgeUpload?.name,
           size: state.knowledgeUpload?.size,
           contentBase64: state.knowledgeUpload?.contentBase64,
           fileName: state.knowledgeUpload?.name,
           websiteUrl: state.knowledgeCreateType === "website" ? state.knowledgeCreateDraft.description : "",
+          cleanedText: state.knowledgeCreateDraft.cleanedText,
+          analysis: state.knowledgeCreateDraft.analysis,
+          chunks: state.knowledgeCreateDraft.chunks,
+          documents: state.knowledgeCreateDraft.documents,
+          chunkCount: state.knowledgeCreateDraft.chunkCount,
+          documentCount: state.knowledgeCreateDraft.documentCount,
+          vectorMode: state.knowledgeVectorMode,
+          segmentMode: state.knowledgeSegmentMode,
         });
         } catch (error) {
           showToast(`知识库创建失败：${error.message}`);
@@ -295,6 +313,7 @@ function bindKnowledgeCreateEvents() {
   if (generatePreview) {
     generatePreview.addEventListener("click", (event) => {
       event.stopPropagation();
+      if (!refreshKnowledgeAnalysis(true)) return;
       showToast("Chunk 预览已生成");
       setState({ knowledgePreview: true });
     });
@@ -310,6 +329,77 @@ function bindKnowledgeCreateEvents() {
   }
 }
 
+function knowledgeSourceTextForAnalysis(draft) {
+  if (state.knowledgeCreateType === "text") return draft.text || "";
+  if (state.knowledgeCreateType === "website") {
+    const lines = String(draft.description || "")
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return lines
+      .map((url, index) => `页面 ${index + 1}: ${url}\n来源地址: ${url}\n本地 V1 已记录页面来源、站点任务和检索入口；跨域正文抓取由后端采集任务补齐。`)
+      .join("\n\n");
+  }
+  return draft.cleanedText || state.knowledgeUpload?.cleanedText || "";
+}
+
+function applyKnowledgeAnalysisToDraft(analysis, options = {}) {
+  const source = knowledgeSourceById(state.knowledgeCreateType);
+  const documentName = options.documentName || state.knowledgeCreateDraft.documentName || state.knowledgeUpload?.name || state.knowledgeCreateDraft.name || `${source.label}知识来源`;
+  const sizeLabel = options.sizeLabel || state.knowledgeUpload?.size || state.knowledgeCreateDraft.size || `${Math.max(1, Math.round((analysis.cleanedChars || 0) / 1024))}KB`;
+  const document = options.document || KnowledgeService.buildDocumentFromAnalysis(analysis, {
+    sourceType: source.id,
+    sourceLabel: source.label,
+    fileName: documentName,
+    documentName,
+    sizeLabel,
+  });
+  state.knowledgeCreateDraft = {
+    ...state.knowledgeCreateDraft,
+    sourceType: source.id,
+    name: state.knowledgeCreateDraft.name || `${source.label}知识库`,
+    documentName,
+    size: sizeLabel,
+    cleanedText: analysis.cleanedText,
+    analysis,
+    chunks: analysis.chunks,
+    documents: [document],
+    chunkCount: analysis.chunkCount,
+    documentCount: 1,
+  };
+  if (state.knowledgeUpload) {
+    state.knowledgeUpload = {
+      ...state.knowledgeUpload,
+      cleanedText: analysis.cleanedText,
+      analysis,
+      chunks: analysis.chunks,
+      documents: [document],
+      chunkCount: analysis.chunkCount,
+      documentCount: 1,
+    };
+  }
+}
+
+function refreshKnowledgeAnalysis(showErrors) {
+  const draft = { ...state.knowledgeCreateDraft, sourceType: state.knowledgeCreateType };
+  const rawText = knowledgeSourceTextForAnalysis(draft);
+  if (!rawText.trim()) {
+    if (showErrors) showToast("请先录入文本或上传可解析文件");
+    return false;
+  }
+  const source = knowledgeSourceById(state.knowledgeCreateType);
+  const analysis = KnowledgeService.analyzeKnowledgeContent(rawText, {
+    sourceType: source.id,
+    sourceLabel: source.label,
+    fileName: draft.documentName || draft.name || state.knowledgeUpload?.name || source.label,
+    vectorMode: state.knowledgeVectorMode,
+    segmentMode: state.knowledgeSegmentMode,
+    ext: KnowledgeService.extensionOf(draft.documentName || state.knowledgeUpload?.name || ""),
+  });
+  applyKnowledgeAnalysisToDraft(analysis);
+  return true;
+}
+
 function collectKnowledgeCreateDraft() {
   const draft = { ...state.knowledgeCreateDraft, sourceType: state.knowledgeCreateType };
   document.querySelectorAll("[data-knowledge-draft]").forEach((el) => {
@@ -317,7 +407,7 @@ function collectKnowledgeCreateDraft() {
   });
   const textEditor = document.querySelector("[data-knowledge-text]");
   if (textEditor) draft.text = textEditor.textContent.trim();
-  if (!draft.name && state.knowledgeCreateType !== "website") draft.name = `${knowledgeSourceById(state.knowledgeCreateType).label}知识库`;
+  if (!draft.name) draft.name = `${knowledgeSourceById(state.knowledgeCreateType).label}知识库`;
   if (state.knowledgeCreateType === "text" && !draft.text) {
     showToast("请输入文本内容");
     return false;
@@ -339,7 +429,7 @@ function isKnowledgeUploadReady() {
 
 function isKnowledgeSupportedFile(fileName = "") {
   if (!fileName) return true;
-  return /\.(pdf|doc|docx|xls|xlsx|txt|csv|json|md|html?)$/i.test(fileName);
+  return /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv|tsv|json|md|markdown|html?|xml|eml|mbox)$/i.test(fileName);
 }
 
 function startKnowledgeFallbackUpload(shouldFail, fileName) {
@@ -396,7 +486,13 @@ async function startKnowledgeFileUpload(file) {
   };
   setState({ knowledgeUpload: upload });
   try {
-    const payload = await KnowledgeService.uploadDocument(file, { sourceType: state.knowledgeCreateType });
+    const source = knowledgeSourceById(state.knowledgeCreateType);
+    const payload = await KnowledgeService.uploadDocument(file, {
+      sourceType: source.id,
+      sourceLabel: source.label,
+      vectorMode: state.knowledgeVectorMode,
+      segmentMode: state.knowledgeSegmentMode,
+    });
     const next = {
       ...upload,
       ...payload,
@@ -413,8 +509,20 @@ async function startKnowledgeFileUpload(file) {
       name: state.knowledgeCreateDraft.name || `${knowledgeSourceById(state.knowledgeCreateType).label}知识库`,
       contentBase64: payload.contentBase64,
       fileName: next.name,
+      size: next.size,
+      cleanedText: payload.cleanedText,
+      analysis: payload.analysis,
+      chunks: payload.chunks,
+      documents: payload.documents,
+      chunkCount: payload.chunkCount,
+      documentCount: payload.documentCount,
     };
-    showToast(`${next.name} 上传成功`);
+    applyKnowledgeAnalysisToDraft(payload.analysis, {
+      documentName: next.name,
+      sizeLabel: next.size,
+      document: payload.documents?.[0],
+    });
+    showToast(`${next.name} 上传成功，已生成 ${payload.chunkCount || 0} 个 Chunk`);
     setState({ knowledgeUpload: next });
   } catch (error) {
     showToast(`上传失败：${error.message}`);

@@ -15,13 +15,15 @@ const KnowledgeMock = {
   },
 
   createKnowledgeBase(payload) {
+    const documents = Array.isArray(payload.documents) ? payload.documents : [];
+    const chunkCount = payload.chunkCount || documents.reduce((sum, doc) => sum + (doc.chunks?.length || 0), 0);
     return {
       id: `kb-${Date.now()}`,
       status: "启用",
       enabled: true,
       embeddingStatus: "已完成",
-      documentCount: 1,
-      chunkCount: 3,
+      documentCount: payload.documentCount || documents.length || 1,
+      chunkCount,
       updatedAt: new Date().toISOString(),
       ...payload,
     };
