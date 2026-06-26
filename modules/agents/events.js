@@ -93,11 +93,7 @@ if (!window.__jellyAgentDelegatedEventsBound) {
       if (agentPage && ["knowledgeCreate", "flow", "wechat"].includes(agentPage.dataset.page)) {
         event.preventDefault();
         event.stopPropagation();
-        if (agentPage.dataset.page === "knowledgeCreate" && typeof resetKnowledgeCreateState === "function") {
-          resetKnowledgeCreateState({ page: "knowledgeCreate", selectedAssistant: null, assistantSub: "knowledge", topPopover: null, agentStatusOpen: false });
-          return;
-        }
-        setState({ page: agentPage.dataset.page, selectedAssistant: null, selectedAgentId: null, topPopover: null, agentStatusOpen: false });
+        navigateToPage(agentPage.dataset.page);
         return;
       }
 

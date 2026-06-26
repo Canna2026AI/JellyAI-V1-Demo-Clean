@@ -2,7 +2,9 @@
 
 function renderChatWorkplace() {
   const visibleConversations = getFilteredConversations();
-  const hasSelected = !!state.selectedConversation;
+  const selectedConversation = getSelectedConversation();
+  const hasSelected = !!selectedConversation;
+  const showLoading = state.chatLoading && !selectedConversation;
   const settingsMode = state.chatSettingsOpen;
   return `
     <section class="conversation-shell ${state.chatSidebarCollapsed ? "sidebar-collapsed" : ""} ${settingsMode ? "settings-inline" : ""}">
@@ -23,7 +25,7 @@ function renderChatWorkplace() {
         ${settingsMode ? renderInlineChatSettingsPanel() : renderConversationListPanel(visibleConversations)}
       </div>
       <div class="conv-main ${hasSelected ? "" : "help-mode"}">
-        ${state.chatLoading ? renderConversationLoading() : hasSelected ? renderConversationDetail() : renderConversationGuide()}
+        ${showLoading ? renderConversationLoading() : hasSelected ? renderConversationDetail() : renderConversationGuide()}
       </div>
       ${hasSelected ? renderConversationInfo() : ""}
     </section>`;
@@ -269,7 +271,8 @@ function renderConversationRefineBar() {
 function renderConversationItem(conversation) {
   const active = state.selectedConversation === conversation.id ? "active" : "";
   const preview = getConversationPreview(conversation);
-  return `<div class="conv-item ${active}" data-conversation="${conversation.id}">
+  const href = `?module=conversations&conversation=${encodeURIComponent(conversation.id)}`;
+  return `<a class="conv-item ${active}" href="${href}" data-conversation="${escapeHtml(conversation.id)}">
     ${iconBox(conversation.avatar, "channel-icon")}
     <div style="min-width:0; flex:1">
       <div style="display:flex; justify-content:space-between; gap:8px">
@@ -280,7 +283,7 @@ function renderConversationItem(conversation) {
       <div class="conv-item-tags"><span>${escapeHtml(conversation.channel)}</span><span>${conversation.type === "manual" ? "人工" : "AI"}</span></div>
     </div>
     <span class="conv-status ${conversation.statusColor}"></span>
-  </div>`;
+  </a>`;
 }
 
 function renderChannelPromo() {

@@ -977,11 +977,18 @@
 }
 
 .conv-item {
+  width: 100%;
   padding: 12px;
+  border: 0;
   border-bottom: 1px solid var(--line);
   display: flex;
   gap: 10px;
   align-items: center;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 

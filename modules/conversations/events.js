@@ -18,7 +18,7 @@ function bindConversationEvents() {
   );
 
   document.querySelectorAll("[data-chat-filter]").forEach((el) =>
-    el.addEventListener("click", () => setState({ chatFilter: el.dataset.chatFilter, selectedConversation: null, chatSettingsOpen: false, chatSortOpen: false, chatSearchModeOpen: false, chatSearchQuery: "" }))
+    el.addEventListener("click", () => setState({ chatFilter: el.dataset.chatFilter, selectedConversation: null, chatLoading: false, chatSettingsOpen: false, chatSortOpen: false, chatSearchModeOpen: false, chatSearchQuery: "" }))
   );
   document.querySelectorAll("[data-chat-settings]").forEach((el) =>
     el.addEventListener("click", () => setState({ chatSettingsOpen: !state.chatSettingsOpen, chatSearchOpen: false, chatSortOpen: false }))
@@ -226,15 +226,12 @@ function bindConversationListEvents() {
     nextInput?.setSelectionRange(query.length, query.length);
   });
   document.querySelector("[data-chat-search-close]")?.addEventListener("click", () => setState({ chatSearchOpen: false, chatSearchModeOpen: false, chatSearchQuery: "" }));
-  document.querySelector("[data-chat-status-filter]")?.addEventListener("change", (event) => setState({ chatStatusFilter: event.target.value, selectedConversation: null }));
-  document.querySelector("[data-chat-channel-filter]")?.addEventListener("change", (event) => setState({ chatChannelFilter: event.target.value, selectedConversation: null }));
+  document.querySelector("[data-chat-status-filter]")?.addEventListener("change", (event) => setState({ chatStatusFilter: event.target.value, selectedConversation: null, chatLoading: false }));
+  document.querySelector("[data-chat-channel-filter]")?.addEventListener("change", (event) => setState({ chatChannelFilter: event.target.value, selectedConversation: null, chatLoading: false }));
   document.querySelectorAll("[data-conversation]").forEach((el) =>
     el.addEventListener("click", () => {
       markConversationRead(el.dataset.conversation);
-      setState({ selectedConversation: el.dataset.conversation, chatLoading: true, chatSortOpen: false, chatSearchModeOpen: false });
-      window.setTimeout(() => {
-        if (state.selectedConversation === el.dataset.conversation) setState({ chatLoading: false });
-      }, 180);
+      setState({ selectedConversation: el.dataset.conversation, chatLoading: false, chatSortOpen: false, chatSearchModeOpen: false });
     })
   );
   document.querySelector("[data-hide-channel-promo]")?.addEventListener("click", (event) => {

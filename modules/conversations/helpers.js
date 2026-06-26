@@ -380,6 +380,7 @@ async function initConversationBackendState() {
   const backendState = await window.conversationService.loadState();
   if (!backendState) return false;
   applyConversationBackendState(backendState);
+  state.chatLoading = false;
   subscribeConversationBackendEvents();
   return true;
 }
@@ -433,7 +434,10 @@ function scheduleConversationBackendRefresh() {
     applyConversationBackendState(backendState);
     if (selectedConversation && conversationData.some((conversation) => conversation.id === selectedConversation)) {
       state.selectedConversation = selectedConversation;
+    } else if (selectedConversation) {
+      state.selectedConversation = null;
     }
+    state.chatLoading = false;
     if (typeof render === "function") render();
   }, 250);
 }

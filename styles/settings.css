@@ -451,10 +451,19 @@
 }
 
 .profile-menu-button {
+  width: 36px;
+  height: 36px;
   border: 0;
+  border-radius: 7px;
   background: transparent;
   color: #98a2b3;
-  font-size: 24px;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.profile-menu-button:hover {
+  background: #f2f5fb;
+  color: #344054;
 }
 
 .profile-brand {
@@ -474,6 +483,11 @@
 
 .profile-top-actions .top-help {
   color: #5b5cff;
+}
+
+.profile-return-button {
+  height: 34px;
+  padding: 0 14px;
 }
 
 .profile-account-name {
@@ -531,6 +545,14 @@
 .profile-breadcrumb {
   margin-bottom: 14px;
   color: #667085;
+}
+
+.profile-breadcrumb button {
+  border: 0;
+  background: transparent;
+  color: #3478f6;
+  font: inherit;
+  padding: 0;
 }
 
 .profile-card {

@@ -22,7 +22,7 @@ function loadKnowledgeFromBackend() {
   const requestId = ++knowledgeLoadSeq;
   state.knowledgeBackendLoading = true;
   state.knowledgeLoadRequestId = requestId;
-  setState({ knowledgeLoading: true });
+  state.knowledgeLoading = !knowledgeBases.length;
   knowledgeRuntime
     .load({
       requestId,

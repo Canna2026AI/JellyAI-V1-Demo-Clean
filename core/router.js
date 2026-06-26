@@ -2,9 +2,103 @@
 
 const app = document.getElementById("app");
 
+const routeModuleByPage = {
+  chat: "conversations",
+  ai: "agents",
+  channels: "channels",
+  wechat: "wecom",
+  knowledge: "knowledge",
+};
+
+const routePageByModule = Object.fromEntries(Object.entries(routeModuleByPage).map(([page, module]) => [module, page]));
+
 function setState(patch) {
   Object.assign(state, patch);
   render();
+}
+
+function getPageLabel(page) {
+  return menu.find((item) => item[0] === page)?.[2] || "工作台";
+}
+
+function pageFromLocation() {
+  const moduleName = new URLSearchParams(window.location.search).get("module");
+  return routePageByModule[moduleName] || "home";
+}
+
+function syncLocationForPage(page, options = {}) {
+  if (!window.history?.pushState) return;
+  if (page === "profile") return;
+  const url = new URL(window.location.href);
+  const moduleName = routeModuleByPage[page];
+  if (moduleName) url.searchParams.set("module", moduleName);
+  else url.searchParams.delete("module");
+  if (page === "chat" && options.conversation) url.searchParams.set("conversation", options.conversation);
+  else url.searchParams.delete("conversation");
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (next === current) return;
+  window.history[options.replace ? "replaceState" : "pushState"]({ page }, "", next);
+}
+
+function buildNavigationPatch(page, options = {}) {
+  const patch = {
+    page,
+    selectedAssistant: null,
+    topPopover: null,
+    agentStatusOpen: false,
+    modal: null,
+  };
+
+  if (page === "profile") {
+    patch.profileReturnPage = state.page === "profile" ? state.profileReturnPage || "chat" : state.page || "chat";
+    return patch;
+  }
+  if (page === "knowledge") patch.assistantSub = "knowledge";
+  if (page === "ai") patch.assistantSub = options.assistantSub || state.assistantSub || "assistant";
+  if (page === "knowledgeCreate") {
+    Object.assign(patch, {
+      assistantSub: "knowledge",
+      knowledgeCreateStep: 1,
+      knowledgeCreateType: "",
+      knowledgeVectorMode: "row",
+      knowledgeSegmentMode: "auto",
+      knowledgePreview: false,
+    });
+  }
+  if (page === "chat") {
+    patch.chatLoading = false;
+    patch.chatSettingsOpen = false;
+    patch.chatSortOpen = false;
+    patch.chatSearchModeOpen = false;
+  }
+  if (page === "wechat") patch.wechatTab = "accounts";
+  if (page === "flow") patch.flowEditing = false;
+  if (options.assistantSub && page === "ai") patch.assistantSub = options.assistantSub;
+  return patch;
+}
+
+function navigateToPage(page, options = {}) {
+  if (!page) return;
+  if (page === "chat" && state.page !== "chat") {
+    syncLocationForPage("chat", options);
+    window.location.reload();
+    return;
+  }
+  if (page === "knowledgeCreate" && typeof resetKnowledgeCreateState === "function") {
+    syncLocationForPage("knowledge", options);
+    resetKnowledgeCreateState(buildNavigationPatch(page, options));
+    return;
+  }
+  syncLocationForPage(page === "knowledgeCreate" ? "knowledge" : page, options);
+  setState(buildNavigationPatch(page, options));
+}
+
+if (typeof window !== "undefined" && !window.__jellyNavigationPopstateBound) {
+  window.__jellyNavigationPopstateBound = true;
+  window.addEventListener("popstate", () => {
+    setState(buildNavigationPatch(pageFromLocation(), { replace: true }));
+  });
 }
 
 function render() {
@@ -126,11 +220,14 @@ function renderProfilePopover() {
 }
 
 function renderProfilePage() {
+  const returnPage = state.profileReturnPage || "chat";
+  const returnLabel = getPageLabel(returnPage);
   return `<section class="profile-page">
     <header class="profile-topbar">
-      <button class="profile-menu-button" type="button" data-page="chat">☰</button>
+      <button class="profile-menu-button" type="button" data-profile-back title="返回${returnLabel}">‹</button>
       <div class="profile-brand"><span class="brand-mark"></span><b>Jelly AI</b></div>
       <div class="profile-top-actions">
+        <button class="button outline profile-return-button" type="button" data-profile-back>返回${returnLabel}</button>
         <button class="top-help" type="button" data-drawer="conversationIntro">？ 帮助中心</button>
         <div class="profile-account-name"><b>Kelvin</b><span>欧诚国际物流</span><i>▾</i></div>
       </div>
@@ -141,7 +238,7 @@ function renderProfilePage() {
         <button type="button" data-demo-action="关联企业">▥ 关联企业</button>
       </aside>
       <main class="profile-main">
-        <div class="profile-breadcrumb">首页 <span>›</span> 个人信息</div>
+        <div class="profile-breadcrumb"><button type="button" data-profile-back>首页</button> <span>›</span> 个人信息</div>
         <section class="profile-card profile-archive">
           <div class="profile-card-head">
             <h2>个人档案</h2>
@@ -211,17 +308,17 @@ function renderPage() {
 
 function renderHome() {
   const basic = [
-    ["🍄", "创建AI助手", "快速创建拥有您自己私有知识内容的AI助手"],
-    ["🍞", "上传私有知识", "将您的私有知识上传，并关联给AI助手使用"],
-    ["🧁", "将AI助手发布到您的网站", "将AI助手放在您的网站上做客户服务"],
-    ["🤖", "将AI与社交媒体平台对接", "快速将AI接入您的社交平台中"],
-    ["🍄", "使用聚合对话界面查看/回复消息", "在聚合对话界面查看/回复的消息"],
-    ["🍞", "邀请更多成员加入", "邀请更多同事加入并分配坐席权限"],
+    ["🍄", "创建AI助手", "快速创建拥有您自己私有知识内容的AI助手", "ai"],
+    ["🍞", "上传私有知识", "将您的私有知识上传，并关联给AI助手使用", "knowledgeCreate"],
+    ["🧁", "将AI助手发布到您的网站", "将AI助手放在您的网站上做客户服务", "channels"],
+    ["🤖", "将AI与社交媒体平台对接", "快速将AI接入您的社交平台中", "channels"],
+    ["🍄", "使用聚合对话界面查看/回复消息", "在聚合对话界面查看/回复的消息", "chat"],
+    ["🍞", "邀请更多成员加入", "邀请更多同事加入并分配坐席权限", "settings"],
   ];
   const advanced = [
-    ["创建AI流程", "AI流程可以让AI按照指定方式完整任务，调用第三方工具解决"],
-    ["使用对话变量", "将联系人信息、工具、知识作为AI大模型提示词变量"],
-    ["意图设置", "意图设置可以判断用户意图配置不同的处理方式"],
+    ["创建AI流程", "AI流程可以让AI按照指定方式完整任务，调用第三方工具解决", "flow"],
+    ["使用对话变量", "将联系人信息、工具、知识作为AI大模型提示词变量", "ai", "tool"],
+    ["意图设置", "意图设置可以判断用户意图配置不同的处理方式", "ai", "intent"],
   ];
   return `
     <section class="content">
@@ -229,21 +326,21 @@ function renderHome() {
       <div class="strip">
         <span>您当前的产品版本为</span>
         <span class="tag">营销基础版</span>
-        <button class="button primary">联系我们</button>
+        <button class="button primary" type="button" data-demo-action="联系我们">联系我们</button>
       </div>
       <div class="section-title">基础配置</div>
       <div class="grid-3">
         ${basic
           .map(
-            ([ico, title, desc]) => `
+            ([ico, title, desc, page]) => `
           <div class="card quick-card">
             <div>
               <div class="card-title"><span>${ico}</span>${title}</div>
               <div class="subtle">${desc}</div>
             </div>
             <div class="card-actions">
-              <button class="button">帮助文档</button>
-              <button class="button primary" data-page="${title.includes("创建") ? "ai" : title.includes("聚合") ? "chat" : title.includes("社交") ? "channels" : "knowledge"}">使用 ›</button>
+              <button class="button" type="button" data-demo-action="${title}帮助文档">帮助文档</button>
+              <button class="button primary" type="button" data-page="${page}">使用 ›</button>
             </div>
           </div>`
           )
@@ -253,13 +350,13 @@ function renderHome() {
       <div class="grid-3">
         ${advanced
           .map(
-            ([title, desc]) => `
+            ([title, desc, page, assistantSub]) => `
           <div class="card" style="padding:0; overflow:hidden">
             <div class="hero-preview"><div class="fake-shot"><div class="fake-shot-line blue"></div><div class="fake-shot-line"></div><div class="fake-shot-line"></div><div class="fake-shot-line"></div></div></div>
             <div style="padding:18px 20px">
               <div class="card-title">${title}</div>
               <div class="subtle">${desc}</div>
-              <div class="card-actions"><button class="button">帮助文档</button><button class="button primary" data-page="${title.includes("流程") ? "flow" : "ai"}">使用 ›</button></div>
+              <div class="card-actions"><button class="button" type="button" data-demo-action="${title}帮助文档">帮助文档</button><button class="button primary" type="button" data-page="${page}" ${assistantSub ? `data-page-assistant-sub="${assistantSub}"` : ""}>使用 ›</button></div>
             </div>
           </div>`
           )

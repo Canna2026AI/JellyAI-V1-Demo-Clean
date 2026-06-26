@@ -8,10 +8,15 @@
     wecom: "wechat",
     knowledge: "knowledge",
   };
-  const moduleName = new URLSearchParams(window.location.search).get("module");
+  const urlParams = new URLSearchParams(window.location.search);
+  const moduleName = urlParams.get("module");
   if (pageMap[moduleName]) {
     state.page = pageMap[moduleName];
     if (moduleName === "agents") state.assistantSub = "assistant";
+    if (moduleName === "conversations" && urlParams.get("conversation")) {
+      state.selectedConversation = urlParams.get("conversation");
+      state.chatLoading = false;
+    }
   }
 
   state.fullstackApi = {

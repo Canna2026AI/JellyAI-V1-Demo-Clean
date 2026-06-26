@@ -37,33 +37,26 @@ const marketingToggle = document.querySelector("[data-marketing-toggle]");
   document.querySelectorAll("[data-marketing-sub]").forEach((el) =>
     el.addEventListener("click", () => setState({ page: "marketing", selectedAssistant: null, marketingNavOpen: true, marketingSub: el.dataset.marketingSub, marketingAccountTab: "accounts" }))
   );
-document.querySelectorAll("[data-demo-action]").forEach((el) =>
+  document.querySelectorAll("[data-demo-action]").forEach((el) =>
     el.addEventListener("click", (event) => {
       event.stopPropagation();
       showToast(`${el.dataset.demoAction}（Demo）`);
     })
   );
+  document.querySelectorAll("[data-profile-back]").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof navigateToPage === "function") navigateToPage(state.profileReturnPage || "chat");
+    })
+  );
   document.querySelectorAll("[data-page]").forEach((el) =>
-    el.addEventListener("click", () => {
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       const page = el.dataset.page;
       if (!page) return;
-      if (page === "knowledgeCreate") {
-        if (typeof resetKnowledgeCreateState === "function") {
-          resetKnowledgeCreateState({ page, selectedAssistant: null, assistantSub: "knowledge", topPopover: null, agentStatusOpen: false });
-        } else {
-          setState({ page, selectedAssistant: null, assistantSub: "knowledge", knowledgeCreateStep: 1, knowledgeCreateType: "", knowledgeVectorMode: "row", knowledgeSegmentMode: "auto", knowledgePreview: false, topPopover: null, agentStatusOpen: false });
-        }
-        return;
-      }
-      if (page === "wechat" && state.page !== "wechat") {
-        setState({ page, selectedAssistant: null, wechatTab: "accounts", topPopover: null, agentStatusOpen: false });
-        return;
-      }
-      if (page === "flow" && state.page !== "flow") {
-        setState({ page, selectedAssistant: null, flowEditing: false, topPopover: null, agentStatusOpen: false });
-        return;
-      }
-      setState({ page, selectedAssistant: null, topPopover: null, agentStatusOpen: false });
+      if (typeof navigateToPage === "function") navigateToPage(page, { assistantSub: el.dataset.pageAssistantSub });
     })
   );
 document.querySelectorAll("[data-modal]").forEach((el) => el.addEventListener("click", () => {

@@ -342,30 +342,30 @@
 }
 
 .recharge-backdrop {
-  justify-content: flex-start;
-  align-items: flex-start;
-  padding: 140px 0 0 88px;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
 }
 
 .recharge-modal {
-  width: 640px;
-  max-width: calc(100vw - 176px);
-  min-height: 360px;
+  width: min(480px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  min-height: 0;
   border-radius: 8px;
   background: #f8fbff;
 }
 
 .recharge-modal-head {
-  padding: 42px 48px 22px;
+  padding: 28px 32px 18px;
   display: flex;
   justify-content: space-between;
   gap: 24px;
 }
 
 .recharge-modal-head h2 {
-  margin: 0 0 14px;
-  font-size: 22px;
-  font-weight: 500;
+  margin: 0 0 10px;
+  font-size: 20px;
+  font-weight: 700;
 }
 
 .recharge-modal-head p,
@@ -385,7 +385,7 @@
 }
 
 .recharge-modal-body {
-  padding: 8px 48px;
+  padding: 4px 32px;
 }
 
 .recharge-modal-body label {
@@ -429,16 +429,15 @@
 }
 
 .recharge-modal-foot {
-  margin-top: 44px;
-  padding: 0 48px 40px;
+  margin-top: 30px;
+  padding: 0 32px 28px;
   display: flex;
   justify-content: flex-end;
   gap: 14px;
 }
 
 .recharge-modal-foot .button {
-  width: 120px;
+  width: 108px;
   height: 42px;
   font-size: 16px;
 }
-
