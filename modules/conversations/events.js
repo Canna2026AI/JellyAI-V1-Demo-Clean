@@ -38,6 +38,7 @@ function bindConversationEvents() {
   bindConversationDetailEvents();
   bindConversationInfoEvents();
   bindConversationConfirmEvents();
+  if (state.modal === "conversationMembers") bindConversationModalEvents();
 }
 
 function bindWorkHoursEvents() {
@@ -87,6 +88,15 @@ function bindWorkHoursEvents() {
     el.addEventListener("click", () => {
       document.querySelector("[data-after-hours-text]")?.focus();
       document.execCommand(el.dataset.afterHoursFormat, false, el.dataset.formatValue || null);
+    })
+  );
+  document.querySelectorAll("[data-after-hours-insert]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const content = document.querySelector("[data-after-hours-text]");
+      content?.focus();
+      insertEditorToken(el.dataset.afterHoursInsert);
+      workHoursSettings.afterHoursText = content?.textContent.trim() || workHoursSettings.afterHoursText;
+      showToast("内容已插入");
     })
   );
 }
@@ -250,6 +260,13 @@ function bindConversationDetailEvents() {
     event.preventDefault();
     sendConvMessage();
   });
+  document.querySelector("[data-cancel-ai-reply]")?.addEventListener("click", (event) => {
+    cancelAiReply(event.currentTarget.dataset.cancelAiReply);
+    showToast("已取消 AI 代答，转为人工跟进");
+    setState({});
+  });
+  const conv = getSelectedConversation();
+  if (conv) queueAiAutoReply(conv.id);
 }
 
 function bindConversationInfoEvents() {
@@ -398,6 +415,68 @@ function bindConversationModalEvents() {
       document.execCommand(el.dataset.quickFormat, false, el.dataset.formatValue || null);
     })
   );
+  document.querySelectorAll("[data-quick-insert-token]").forEach((el) =>
+    el.addEventListener("click", () => {
+      document.getElementById("quickReplyContent")?.focus();
+      insertEditorToken(el.dataset.quickInsertToken);
+      document.querySelector(".quick-reply-modal [data-modal-ok]")?.removeAttribute("disabled");
+    })
+  );
+
+  const memberSearch = document.querySelector("[data-group-member-search]");
+  if (memberSearch) memberSearch.addEventListener("input", () => {
+    const query = memberSearch.value;
+    setState({ conversationMemberSearch: query });
+    requestAnimationFrame(() => {
+      const nextInput = document.querySelector("[data-group-member-search]");
+      nextInput?.focus();
+      nextInput?.setSelectionRange(query.length, query.length);
+    });
+  });
+  document.querySelectorAll("[data-member-select]").forEach((el) =>
+    el.addEventListener("click", () => setState({ selectedConversationMember: el.dataset.memberSelect }))
+  );
+  document.querySelector("[data-toggle-member-tag]")?.addEventListener("click", (event) => {
+    const conv = getSelectedConversation();
+    if (!conv) return;
+    updateConversationMemberTag(conv.id, event.currentTarget.dataset.toggleMemberTag, "重点成员");
+    showToast("群成员标签已更新");
+    setState({});
+  });
+  document.querySelector("[data-copy-member-phone]")?.addEventListener("click", async (event) => {
+    const phone = event.currentTarget.dataset.copyMemberPhone;
+    if (!phone) return;
+    try {
+      await navigator.clipboard?.writeText(phone);
+      showToast("手机号已复制");
+    } catch {
+      showToast(`手机号：${phone}`);
+    }
+  });
+  document.querySelector("[data-insert-member-mention]")?.addEventListener("click", () => {
+    const conv = getSelectedConversation();
+    const member = getSelectedConversationMember(conv);
+    if (!member) return;
+    state.modal = null;
+    setState({});
+    requestAnimationFrame(() => {
+      const input = document.getElementById("convInput");
+      if (!input) return;
+      const prefix = input.value.trim() ? `${input.value.trim()} ` : "";
+      input.value = `${prefix}@${member.name} `;
+      input.focus();
+    });
+  });
+}
+
+function insertEditorToken(type) {
+  const snippets = {
+    link: "https://example.com",
+    image: "[图片]",
+    table: "\n| 项目 | 内容 |\n| --- | --- |\n| 备注 | 请输入内容 |\n",
+    variable: "{{客户名称}}",
+  };
+  document.execCommand("insertText", false, snippets[type] || "");
 }
 
 function sendConvMessage() {

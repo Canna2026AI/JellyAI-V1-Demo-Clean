@@ -1,11 +1,11 @@
 // Aggregated conversation module renderers.
 
 function renderChatWorkplace() {
-  if (state.chatSettingsOpen) return renderChatSettings();
   const visibleConversations = getFilteredConversations();
   const hasSelected = !!state.selectedConversation;
+  const settingsMode = state.chatSettingsOpen;
   return `
-    <section class="conversation-shell ${state.chatSidebarCollapsed ? "sidebar-collapsed" : ""}">
+    <section class="conversation-shell ${state.chatSidebarCollapsed ? "sidebar-collapsed" : ""} ${settingsMode ? "settings-inline" : ""}">
       <div class="conv-sidebar">
         ${renderAgentStatusBar()}
         ${conversationFilters
@@ -19,40 +19,58 @@ function renderChatWorkplace() {
           .map((x) => `<div class="subnav-item custom-view-item ${state.chatFilter === x ? "active" : ""}" data-chat-filter="${escapeHtml(x)}"><span></span><b>${escapeHtml(x)}</b></div>`)
           .join("")}
       </div>
-      <div class="conv-list">
-        <div class="conv-list-head">
-          <div class="conv-list-title">
-            <button class="chat-sidebar-toggle" type="button" data-chat-sidebar-toggle aria-label="${state.chatSidebarCollapsed ? "展开对话分类" : "收起对话分类"}" title="${state.chatSidebarCollapsed ? "展开对话分类" : "收起对话分类"}">
-              <span>≡</span><i>${state.chatSidebarCollapsed ? "›" : "‹"}</i>
-            </button>
-            <b>${state.chatFilter}</b>
-          </div>
-          <div class="conv-list-tools">
-            <button class="icon-button conv-sort-button ${state.chatSortOpen ? "active" : ""}" data-chat-sort-toggle title="对话排序">⇅</button>
-            <button class="icon-button ${state.chatSearchOpen ? "active" : ""}" data-chat-search-toggle title="搜索对话">⌕</button>
-            ${state.chatSortOpen ? `
-              <div class="conv-sort-menu">
-                <button class="${state.chatSort === "newest" ? "active" : ""}" data-chat-sort="newest"><span>新消息优先</span><b>✓</b></button>
-                <button class="${state.chatSort === "unread" ? "active" : ""}" data-chat-sort="unread"><span>未读消息优先</span><b>✓</b></button>
-                <button class="${state.chatSort === "status" ? "active" : ""}" data-chat-sort="status"><span>状态排序</span><b>✓</b></button>
-              </div>
-            ` : ""}
-          </div>
-        </div>
-        ${state.chatSearchOpen ? renderConversationSearch() : ""}
-        ${renderConversationRefineBar()}
-        ${
-          visibleConversations.length
-            ? visibleConversations.map((item) => renderConversationItem(item)).join("")
-            : `<div class="empty" style="min-height:240px">${state.chatSearchQuery.trim() ? "未找到匹配的对话" : `暂无${state.chatFilter}消息`}</div>`
-        }
-        ${renderChannelPromo()}
+      <div class="conv-list ${settingsMode ? "chat-settings-panel" : ""}">
+        ${settingsMode ? renderInlineChatSettingsPanel() : renderConversationListPanel(visibleConversations)}
       </div>
       <div class="conv-main ${hasSelected ? "" : "help-mode"}">
         ${state.chatLoading ? renderConversationLoading() : hasSelected ? renderConversationDetail() : renderConversationGuide()}
       </div>
       ${hasSelected ? renderConversationInfo() : ""}
     </section>`;
+}
+
+function renderConversationListPanel(visibleConversations) {
+  return `
+    <div class="conv-list-head">
+      <div class="conv-list-title">
+        <button class="chat-sidebar-toggle" type="button" data-chat-sidebar-toggle aria-label="${state.chatSidebarCollapsed ? "展开对话分类" : "收起对话分类"}" title="${state.chatSidebarCollapsed ? "展开对话分类" : "收起对话分类"}">
+          <span>≡</span><i>${state.chatSidebarCollapsed ? "›" : "‹"}</i>
+        </button>
+        <b>${state.chatFilter}</b>
+      </div>
+      <div class="conv-list-tools">
+        <button class="icon-button conv-sort-button ${state.chatSortOpen ? "active" : ""}" data-chat-sort-toggle title="对话排序">⇅</button>
+        <button class="icon-button conv-search-button ${state.chatSearchOpen ? "active" : ""}" data-chat-search-toggle title="搜索对话" aria-label="搜索对话"><span class="search-glyph"></span></button>
+        ${state.chatSortOpen ? `
+          <div class="conv-sort-menu">
+            <button class="${state.chatSort === "newest" ? "active" : ""}" data-chat-sort="newest"><span>新消息优先</span><b>✓</b></button>
+            <button class="${state.chatSort === "unread" ? "active" : ""}" data-chat-sort="unread"><span>未读消息优先</span><b>✓</b></button>
+            <button class="${state.chatSort === "status" ? "active" : ""}" data-chat-sort="status"><span>状态排序</span><b>✓</b></button>
+          </div>
+        ` : ""}
+      </div>
+    </div>
+    ${state.chatSearchOpen ? renderConversationSearch() : ""}
+    ${renderConversationRefineBar()}
+    ${
+      visibleConversations.length
+        ? visibleConversations.map((item) => renderConversationItem(item)).join("")
+        : `<div class="empty" style="min-height:240px">${state.chatSearchQuery.trim() ? "未找到匹配的对话" : `暂无${state.chatFilter}消息`}</div>`
+    }
+    ${renderChannelPromo()}
+  `;
+}
+
+function renderInlineChatSettingsPanel() {
+  const tabs = [["automation", "AI自动化"], ["hours", "工作时间"], ["quick", "快捷消息"], ["forward", "消息转发"]];
+  return `
+    <div class="chat-settings-inline-head">
+      <b>聚合对话设置</b>
+      <button class="icon-button small-icon" data-chat-settings title="返回对话">×</button>
+    </div>
+    <nav class="chat-settings-tabs inline">${tabs.map(([id, label]) => `<button class="${state.chatSettingsTab === id ? "active" : ""}" data-chat-settings-tab="${id}">${label}</button>`).join("")}</nav>
+    <div class="chat-settings-content inline">${renderChatSettingsContent()}</div>
+  `;
 }
 
 function renderChatSettings() {
@@ -168,7 +186,7 @@ function renderWorkHoursSettings() {
       </select>
       <div class="after-hours-editor">
         <div class="after-hours-toolbar" aria-label="文本格式工具栏">
-          <button type="button" data-after-hours-format="formatBlock" data-format-value="h3">H</button><button type="button" data-after-hours-format="bold"><b>B</b></button><button type="button" data-after-hours-format="italic"><i>I</i></button><button type="button" data-after-hours-format="strikeThrough">S̶</button><span></span><button type="button" data-after-hours-format="insertUnorderedList">☷</button><button type="button" data-after-hours-format="insertOrderedList">1₂</button><span></span><button type="button" data-after-hours-format="outdent">≡</button><button type="button" data-after-hours-format="indent">☰</button><span></span><button type="button" data-demo-action="插入链接">↗</button><button type="button" data-demo-action="插入图片">▣</button><button type="button" data-demo-action="插入表格">▦⌄</button><button type="button" data-demo-action="插入内容">▧⌄</button><span></span><button type="button" class="muted" data-after-hours-format="undo">↶</button><button type="button" class="muted" data-after-hours-format="redo">↷</button>
+          <button type="button" data-after-hours-format="formatBlock" data-format-value="h3">H</button><button type="button" data-after-hours-format="bold"><b>B</b></button><button type="button" data-after-hours-format="italic"><i>I</i></button><button type="button" data-after-hours-format="strikeThrough">S</button><span></span><button type="button" data-after-hours-format="insertUnorderedList">列表</button><button type="button" data-after-hours-format="insertOrderedList">编号</button><span></span><button type="button" data-after-hours-format="outdent">外移</button><button type="button" data-after-hours-format="indent">缩进</button><span></span><button type="button" data-after-hours-insert="link">链接</button><button type="button" data-after-hours-insert="image">图片</button><button type="button" data-after-hours-insert="table">表格</button><button type="button" data-after-hours-insert="variable">变量</button><span></span><button type="button" class="muted" data-after-hours-format="undo">撤销</button><button type="button" class="muted" data-after-hours-format="redo">重做</button>
         </div>
         <div class="after-hours-content" contenteditable="true" data-after-hours-text>${escapeHtml(workHoursSettings.afterHoursText)}</div>
       </div>
@@ -194,7 +212,7 @@ function renderQuickMessageSettings() {
     <div class="quick-message-toolbar">
       <button class="button primary" data-modal="quickReply">＋ 新增快捷回复</button>
       <button class="button" data-modal="quickGroup">＋ 新增分组</button>
-      <label class="quick-message-search"><span>⌕</span><input data-quick-message-search value="${escapeHtml(state.quickMessageSearch)}" placeholder="搜索"></label>
+      <label class="quick-message-search"><span class="search-glyph"></span><input data-quick-message-search value="${escapeHtml(state.quickMessageSearch)}" placeholder="搜索"></label>
     </div>
     ${!hasData ? `<div class="quick-message-empty"><div class="quick-empty-art">▤</div><span>暂无分组</span></div>` : `
       <div class="quick-group-list">
@@ -287,6 +305,7 @@ function renderConversationLoading() {
 function renderConversationDetail() {
   const conv = getSelectedConversation();
   if (!conv) return renderConversationGuide();
+  const aiReplyActive = shouldShowAiReplyBanner(conv);
   return `
         <div class="conv-head">
           <div><b>${escapeHtml(conv.name)} › ${escapeHtml(conv.assignee)}</b><span class="conv-head-sub">${escapeHtml(conv.channel)} · ${conv.hosted ? "托管中" : "未托管"}</span></div>
@@ -295,6 +314,7 @@ function renderConversationDetail() {
         <div class="conv-messages">
           ${getConversationMessages(conv).length ? getConversationMessages(conv).map((m) => renderConvBubble(m)).join("") : `<div class="empty" style="min-height:220px">暂无消息记录</div>`}
         </div>
+        ${aiReplyActive ? renderAiReplyBar(conv) : ""}
         <div class="conv-quick-strip">
           ${quickMessageData.replies.slice(0, 4).map((reply) => `<button type="button" data-quick-insert="${reply.id}">${escapeHtml(reply.title)}</button>`).join("")}
           <button type="button" data-modal="quickReply">＋ 新增</button>
@@ -305,6 +325,16 @@ function renderConversationDetail() {
           <div style="display:flex; justify-content:space-between"><span class="subtle">□ Enter 发送模拟人工消息</span><button class="button primary small" id="convSend">➤</button></div>
         </div>
   `;
+}
+
+function renderAiReplyBar(conv) {
+  const last = getConversationLastMessage(conv);
+  const preview = String(last?.text || "新消息").slice(0, 28);
+  return `<div class="ai-reply-bar">
+    <span class="ai-reply-dot"></span>
+    <div><b>AI 正在替你回复</b><span>将根据客户最后一句“${escapeHtml(preview)}”自动继续接待</span></div>
+    <button type="button" data-cancel-ai-reply="${conv.id}" title="取消 AI 代答">×</button>
+  </div>`;
 }
 
 function renderConversationGuide() {
@@ -349,8 +379,10 @@ function getGuideCardAction(title) {
   if (title === "工作时间设置") return `data-chat-settings-open="hours"`;
   if (title === "快捷消息") return `data-chat-settings-open="quick"`;
   if (title === "消息转发") return `data-chat-settings-open="forward"`;
+  if (title === "转人工对话设置") return `data-chat-settings-open="automation"`;
   if (title === "数据统计") return `data-page="analytics"`;
   if (title === "联系人列表") return `data-page="contacts"`;
+  if (title === "联系人字段设置") return `data-page="contacts"`;
   return `data-demo-action="${title}"`;
 }
 
@@ -360,7 +392,7 @@ function renderConversationInfo() {
   const possibleTags = Array.from(new Set(["高意向", "待报价", "海运询价", "演示预约", "售后问题", ...conv.tags]));
   return `<div class="conv-info">
     <h3>联系人</h3>
-    <div class="mini-card"><b>${escapeHtml(conv.customer.name)}</b><br><span class="subtle">${escapeHtml(conv.customer.remark)}</span><br><br><button class="button primary" style="width:100%" data-demo-action="查看联系人详情">查看/添加群成员</button></div>
+    <div class="mini-card"><b>${escapeHtml(conv.customer.name)}</b><br><span class="subtle">${escapeHtml(conv.customer.remark)}</span><br><br><button class="button primary" style="width:100%" data-modal="conversationMembers">查看/添加群成员</button></div>
     <div class="mini-card"><div class="mini-card-head">当前跟进人</div><span class="avatar">${escapeHtml(conv.assignee.slice(0, 1))}</span> ${escapeHtml(conv.assignee)} <button class="button ghost small" data-transfer-human>转人工</button></div>
     <div class="mini-card">
       <div class="mini-card-head">会话状态</div>
