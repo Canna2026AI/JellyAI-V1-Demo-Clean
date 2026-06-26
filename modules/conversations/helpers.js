@@ -557,7 +557,7 @@ function queueAiAutoReply(conversationId) {
         if (box) box.scrollTop = box.scrollHeight;
       });
     }
-  }, 4200);
+  }, 12000);
 }
 
 function buildAiAutoReplyText(conversation, lastText) {
