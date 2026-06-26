@@ -431,6 +431,8 @@
   margin-bottom: 14px;
   line-height: 1.6;
   color: #1f2937;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .preview-chunk-head {
@@ -440,12 +442,16 @@
   color: #8a96a8;
   font-size: 12px;
   margin-bottom: 8px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .preview-chunk-head span:first-child {
   background: #eef2f7;
   border-radius: 4px;
   padding: 3px 7px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .knowledge-complete {
@@ -523,7 +529,7 @@
 
 .knowledge-console {
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) minmax(420px, 0.92fr);
+  grid-template-columns: minmax(300px, 0.9fr) minmax(360px, 1.1fr);
   gap: 14px;
   align-items: start;
 }
@@ -804,7 +810,7 @@
   color: #667085;
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1360px) {
   .knowledge-console,
   .knowledge-detail-stats,
   .knowledge-summary-strip {
